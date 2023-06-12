@@ -52,6 +52,8 @@ class beamng_client:
         self.port = port
         self.logger = logger
         
+        self.lidar_t = None
+        
     def init_client(self) -> None:
         self.beamng_terminal = BeamNGpy(self.host, self.port)
         
@@ -80,9 +82,9 @@ class beamng_client:
         print(active_vehicles)
         vehicle = active_vehicles["vehicleA"]
         vehicle.connect(self.beamng_terminal)
-        vehicle.ai.set_mode('disabled')
-        lidar_t = lidar(self.beamng_terminal, vehicle, callback, self.logger)
-        lidar_t.start_stream()
+        vehicle.ai.set_mode('span')
+        self.lidar_t = lidar(self.beamng_terminal, vehicle, callback, self.logger)
+        # lidar_t.start_stream()
         
         
     def disconnect_client(self) -> None:

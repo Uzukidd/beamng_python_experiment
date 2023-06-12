@@ -1,3 +1,3 @@
 from .config_init import parse_config
-from .dataset_tools import beamng_point_cloud_process_tools
+from .dataset_tools import beamng_point_cloud_process_tools, beamng_point_cloud_dataset
 from .open3d_vis_utils import draw_scenes
