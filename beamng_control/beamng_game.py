@@ -17,6 +17,8 @@ class beamng_server:
         av_a = Vehicle('vehicleA', model='etk800')
 
         scenario.add_vehicle(av_a, pos=(-712.591, 535.908, 119.860), rot_quat=angle_to_quat((-0.221, 0.254, -64.008)))
+        # scenario.add_vehicle(av_a, pos=(-712.591, 535.908, 119.860), rot_quat=angle_to_quat((0.0, 0.0, 180.0)))
+
         # scenario.add_vehicle(av_b)
         scenario.make(self.beamng_terminal)
         self.beamng_terminal.scenario.load(scenario)
@@ -75,15 +77,15 @@ class beamng_client:
         self.debug_lidar_resize(width, height)
         return window
         
-    def debug_luanch_test(self, callback) -> None:
+    def debug_luanch_test(self, callback=None, lidar_para={}) -> None:
         running_scenario = self.beamng_terminal.scenario.get_current()
         print(running_scenario.name)
         active_vehicles = self.beamng_terminal.vehicles.get_current()
         print(active_vehicles)
         vehicle = active_vehicles["vehicleA"]
         vehicle.connect(self.beamng_terminal)
-        vehicle.ai.set_mode('span')
-        self.lidar_t = lidar(self.beamng_terminal, vehicle, callback, self.logger)
+        vehicle.ai.set_mode('disabled')
+        self.lidar_t = lidar(self.beamng_terminal, vehicle, lidar_para, callback, self.logger)
         # lidar_t.start_stream()
         
         
