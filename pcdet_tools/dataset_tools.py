@@ -53,7 +53,7 @@ class carla_point_cloud_dataset(DatasetTemplate):
         return data_dict
 
 class beamng_point_cloud_dataset(DatasetTemplate):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None, encoder=None) -> None:
         super().__init__(
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
@@ -81,7 +81,7 @@ class beamng_point_cloud_dataset(DatasetTemplate):
     def __getitem__(self, index):
         points = self.lidar.get_single_frame()
         input_dict = {
-            'points': points.reshape(-1, 4),
+            'points': torch.from_numpy(points.reshape(-1, 4)),
         }
         data_dict = self.prepare_data(data_dict=input_dict)
         return data_dict
