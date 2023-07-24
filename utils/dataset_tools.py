@@ -64,57 +64,9 @@ def mask_points_by_range(points, limit_range):
            & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4])
     return mask
 
-class carla_point_cloud_dataset(torch_data.Dataset):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
-        super().__init__(
-            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
-        )
-        
-        self.lidar = lidar
-        self.dataset_cfg = dataset_cfg
-        self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
-        self.point_feature_encoder = PointFeatureEncoder(
-            self.dataset_cfg.POINT_FEATURE_ENCODING,
-            point_cloud_range=self.point_cloud_range
-        )
-        self.data_processor = DataProcessor(
-            self.dataset_cfg.DATA_PROCESSOR, point_cloud_range=self.point_cloud_range,
-            training=self.training, num_point_features=self.point_feature_encoder.num_point_features
-        )
-        
-    def point_cloud_input(self, points):
-        input_dict = {
-            'points': points.reshape(-1, 4),
-        }
-        data_dict = self.prepare_data(data_dict=input_dict)
-        return data_dict
-        
-        
-    def __getitem__(self, index):
-        points = self.lidar.get_single_frame()
-        
-        input_dict = {
-            'points': None if points is None else points.reshape(-1, 4),
-        }
-        data_dict = input_dict
-        if points is not None:
-            data_dict = self.prepare_data(data_dict=input_dict)
-        return data_dict
-    
-    def prepare_data(self, data_dict):
-        if data_dict.get('points', None) is not None:
-            data_dict = self.point_feature_encoder.forward(data_dict)
-
-        data_dict = self.data_processor.forward(
-            data_dict=data_dict
-        )
-
-        return data_dict
-
-class beamng_point_cloud_dataset(torch_data.Dataset):
+class point_cloud_dataset_base(torch_data.Dataset):
     def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
         super().__init__()
-        
         self.lidar = lidar
         self.dataset_cfg = dataset_cfg
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
@@ -125,22 +77,6 @@ class beamng_point_cloud_dataset(torch_data.Dataset):
         self.grid_size = self.voxel_size = None
         self.voxel_generator = None
         
-    def point_cloud_input(self, points):
-        input_dict = {
-            'points': points.reshape(-1, 4),
-        }
-        data_dict = self.prepare_data(data_dict=input_dict)
-        return data_dict
-        
-        
-    def __getitem__(self, index):
-        points = self.lidar.get_single_frame()
-        input_dict = {
-            'points': points.reshape(-1, 4),
-        }
-        data_dict = self.prepare_data(data_dict=input_dict)
-        return data_dict
-    
     def transform_points_to_voxels(self, data_dict=None, config=None):
         if data_dict is None:
             grid_size = (self.point_cloud_range[3:6] - self.point_cloud_range[0:3]) / np.array(config.VOXEL_SIZE)
@@ -310,4 +246,52 @@ class beamng_point_cloud_dataset(torch_data.Dataset):
         data_dict = self.transform_points_to_voxels(data_dict, self.dataset_cfg.DATA_PROCESSOR[2])
 
         return data_dict
+
+class carla_point_cloud_dataset(point_cloud_dataset_base):
+    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+        super().__init__(
+            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=lidar
+        )
+        
+    def point_cloud_input(self, points):
+        input_dict = {
+            'points': points.reshape(-1, 4),
+        }
+        data_dict = self.prepare_data(data_dict=input_dict)
+        return data_dict
+        
+        
+    def __getitem__(self, index):
+        points = self.lidar.get_single_frame()
+        
+        input_dict = {
+            'points': None if points is None else points.reshape(-1, 4),
+        }
+        data_dict = input_dict
+        if points is not None:
+            data_dict = self.prepare_data(data_dict=input_dict)
+        return data_dict
+
+class beamng_point_cloud_dataset(point_cloud_dataset_base):
+    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+        super().__init__(
+            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=lidar
+        )
+        
+    def point_cloud_input(self, points):
+        input_dict = {
+            'points': points.reshape(-1, 4),
+        }
+        data_dict = self.prepare_data(data_dict=input_dict)
+        return data_dict
+        
+    def __getitem__(self, index):
+        points = self.lidar.get_single_frame()
+        input_dict = {
+            'points': points.reshape(-1, 4),
+        }
+        data_dict = self.prepare_data(data_dict=input_dict)
+        return data_dict
+    
+
 

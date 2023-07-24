@@ -142,10 +142,12 @@ def translate_boxes_to_open3d_instance(gt_boxes):
     return line_set, box3d
 
 
-def draw_box(vis, gt_boxes, color=(0, 1, 0), ref_labels=None, score=None, confidence=0.5):
+def draw_box(vis, gt_boxes, color=(0, 1, 0), ref_labels=None, score=None, confidence=None):
     for i in range(gt_boxes.shape[0]):
-        if score[i] < confidence:
-            continue
+        
+        if confidence is not None:
+            if score[i] < confidence[ref_labels[i]]:
+                continue
         line_set, box3d = translate_boxes_to_open3d_instance(gt_boxes[i])
         if ref_labels is None:
             line_set.paint_uniform_color(color)
