@@ -4,6 +4,7 @@ import logging
 
 from .dataset_tools import carla_point_cloud_dataset, beamng_point_cloud_dataset
 from .config_init import cfg, cfg_from_yaml_file
+from .visualize_utils import draw_scenes_maya, mayavi_animate_visualizer
 from .open3d_vis_utils import draw_scenes
 from .cpp_ext import iou3d_nms_cuda
 

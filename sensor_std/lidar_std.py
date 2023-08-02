@@ -17,12 +17,14 @@ import numpy as np
 from queue import Queue
 
 class lidar:
-    def __init__(self, client, vehicle, lidar_para={}, callback=None, logger=None) -> None:
+    def __init__(self, client, vehicle, lidar_para={}, callback=None, logger=None, pcs_cache=False) -> None:
         self.stream_thread = Thread(target=self.update_stream, args=[])
         self.vehicle = vehicle
         self.callback = callback
         self.lidar = Lidar('lidar', client, vehicle, **lidar_para)
         self.logger = logger
+        
+        self.pcs_cache = pcs_cache
 
     def get_single_frame(self) -> np.array:
         def rotate(points, n):
@@ -31,7 +33,6 @@ class lidar:
             # Step 2
             theta = np.arctan2(n[1], n[0])
             phi = -np.arctan2(n[2], np.sqrt(n[0]**2 + n[1]**2))
-            # print(phi)
             # Step 3
             R_z = np.array([[np.cos(theta), -np.sin(theta), 0],
                         [np.sin(theta), np.cos(theta), 0],
@@ -58,6 +59,9 @@ class lidar:
         _[:, 0:3] = points_np
         points_np = _
         
+        if self.pcs_cache:
+            points_np.astype(np.float32).tofile("./.np_cache/beamng_pcs.bin")
+        
         return points_np
         
     def start_stream(self) -> None:
@@ -73,22 +77,24 @@ class lidar:
             
 class lidar_carla:
     def __init__(self, carla_world, vehicle, lidar_para={
-            "upper_fov":"15.0",
-            "lower_fov":"-25.0",
+            "upper_fov":"2.0",
+            "lower_fov":"-24.8",
             "channels":"64.0",
-            "range":"100.0",
-            "points_per_second":"6600000",
+            "range":"120.0",
+            "points_per_second":"3300000",
             "semantic":False,
-            "no_noise":False,
+            "no_noise":True,
             "delta":0.05,
-            "rotation_frequency":"20"
-        }, logger=None) -> None:
-        self.pcs_frames = Queue(1)
+            # "rotation_frequency":"20"
+        }, logger=None, pcs_cache=False, pcs_frames_cache=1) -> None:
+        self.pcs_frames = Queue(pcs_frames_cache)
         self.vehicle = vehicle
         self.carla_world = carla_world
         self.logger = logger
         self.lidar_para = lidar_para
         self.lidar = None
+        
+        self.pcs_cache = pcs_cache
         
     def init_lidar(self):
         lidar_bp = self.generate_lidar_bp(self.lidar_para, self.carla_world)
@@ -97,7 +103,7 @@ class lidar_carla:
         lidar_transform = carla.Transform(carla.Location(x=-0.5, z=1.8) + user_offset)
 
         self.lidar = self.carla_world.spawn_actor(lidar_bp, lidar_transform, attach_to=self.vehicle)
-        self.lidar.listen(lambda point_cloud: self._pcs_callback(point_cloud))
+        self.lidar.listen(self._pcs_callback)
         
     def generate_lidar_bp(self, arg, world):
         """Generates a CARLA blueprint based on the script parameters"""
@@ -116,7 +122,7 @@ class lidar_carla:
         lidar_bp.set_attribute('lower_fov', str(arg["lower_fov"]))
         lidar_bp.set_attribute('channels', str(arg["channels"]))
         lidar_bp.set_attribute('range', str(arg["range"]))
-        lidar_bp.set_attribute('rotation_frequency', str(arg["rotation_frequency"]))
+        lidar_bp.set_attribute('rotation_frequency', str(1/arg["delta"]))
         lidar_bp.set_attribute('points_per_second', str(arg["points_per_second"]))
         return lidar_bp
 
@@ -131,6 +137,10 @@ class lidar_carla:
     def _pcs_callback(self, point_cloud) -> None:
         data = np.copy(np.frombuffer(point_cloud.raw_data, dtype=np.dtype('f4')))
         data = data.reshape((-1, 4))
-        data[:,1] = -data[:,1] 
+        data[:, 1] = -data[:, 1] 
+        # data[:, 3] = 0
         self.pcs_frames.put(data)
+        
+        if self.pcs_cache:
+            data.astype(np.float32).tofile("./.np_cache/carla_pcs.bin")
         

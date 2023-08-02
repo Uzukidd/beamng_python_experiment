@@ -7,16 +7,17 @@ import open3d
 import torch
 import matplotlib
 import numpy as np
+from PIL import Image, ImageFont, ImageDraw
 
 box_colormap = [
-    [1, 1, 1],
-    [0, 1, 0],
-    [0, 1, 1],
-    [1, 1, 0],
+    [1.0, 1.0, 1.0],
+    [0, 1.0, 0],
+    [0, 1.0, 1.0],
+    [1.0, 1.0, 0],
 ]
 
 
-def text_3d(text, pos, direction=None, degree=0.0, font='DejaVu Sans Mono for Powerline.ttf', font_size=16):
+def text_3d(text, pos, direction=None, degree=0.0, font='arial.ttf', font_size=72):
     """
     Generate a 3D text point cloud used for visualization.
     :param text: content of the text
@@ -80,7 +81,7 @@ def get_transform_matrix():
                      [1,0,0],
                      [0,0,1],])
 
-def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_colors=None, draw_origin=True, confidence=0.5):
+def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_colors=None, draw_origin=True, confidence=None):
     if isinstance(points, torch.Tensor):
         points = points.cpu().numpy()
     if isinstance(gt_boxes, torch.Tensor):
@@ -91,7 +92,7 @@ def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref
     # points[:,:3] = np.dot(points[:,:3] , get_transform_matrix().T)
 
     vis.get_render_option().point_size = 1.0
-    vis.get_render_option().background_color = np.zeros(3)
+    vis.get_render_option().background_color = np.zeros((3))
 
     # draw origin
     if draw_origin:
@@ -108,10 +109,10 @@ def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref
         pts.colors = open3d.utility.Vector3dVector(point_colors)
 
     if gt_boxes is not None:
-        vis = draw_box(vis, gt_boxes, (0, 0, 1))
+        vis = draw_box(vis, gt_boxes, (0, 0, 1.0))
 
     if ref_boxes is not None:
-        vis = draw_box(vis, ref_boxes, (0, 1, 0), ref_labels, ref_scores, confidence)
+        vis = draw_box(vis, ref_boxes, (0, 1.0, 0), ref_labels, ref_scores, confidence)
 
 
 
@@ -125,11 +126,13 @@ def translate_boxes_to_open3d_instance(gt_boxes):
           |/         |/
           2 -------- 0
     """
+
     center = gt_boxes[0:3]
     lwh = gt_boxes[3:6]
     axis_angles = np.array([0, 0, gt_boxes[6] + 1e-10])
     rot = open3d.geometry.get_rotation_matrix_from_axis_angle(axis_angles)
     box3d = open3d.geometry.OrientedBoundingBox(center, rot, lwh)
+    box3d.color = np.ones((3))
 
     line_set = open3d.geometry.LineSet.create_from_oriented_bounding_box(box3d)
 
@@ -142,11 +145,15 @@ def translate_boxes_to_open3d_instance(gt_boxes):
     return line_set, box3d
 
 
-def draw_box(vis, gt_boxes, color=(0, 1, 0), ref_labels=None, score=None, confidence=0.5):
+def draw_box(vis, gt_boxes, color=(0, 1.0, 0), ref_labels=None, score=None, confidence=None):
     for i in range(gt_boxes.shape[0]):
-        if score[i] < confidence:
-            continue
+        
+        if confidence is not None:
+            if score[i] < confidence[ref_labels[i]]:
+                continue
+        
         line_set, box3d = translate_boxes_to_open3d_instance(gt_boxes[i])
+
         if ref_labels is None:
             line_set.paint_uniform_color(color)
         else:
@@ -154,10 +161,11 @@ def draw_box(vis, gt_boxes, color=(0, 1, 0), ref_labels=None, score=None, confid
 
         vis.add_geometry(line_set, False)
 
-        # if score is not None:
-        #     corners = box3d.get_box_points()
-        #     text = o3d.geometry.create_text_geometry('%.2f' % score[i], 20, 10)
-        #     text.translate(corners[5])
-        #     vis.add_geometry(text)
+        if score is not None:
+            corners = box3d.get_box_points()
+            # text = o3d.geometry.create_text_geometry('%.2f' % score[i], 20, 10)
+            # text.translate(corners[5])
+            # text_3d("test", corners[5], font_size=32)
+            # vis.add_geometry(text)
             # vis.add_3d_label(corners[5], '%.2f' % score[i])
     return vis

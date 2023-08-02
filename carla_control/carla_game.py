@@ -8,7 +8,7 @@ import open3d as o3d
 from sensor_std import lidar_carla
 
 class carla_client:
-    def __init__(self, host = "127.0.0.1", port = 2000, rendering = False) -> None:
+    def __init__(self, host = "127.0.0.1", port = 2000, rendering = True) -> None:
         self.carla_client = None
         self.carla_world = None
         self.host = host
@@ -41,10 +41,10 @@ class carla_client:
         blueprint_library = self.carla_world.get_blueprint_library()
         vehicle_bp = blueprint_library.filter("model3")[0]
         vehicle_transform = self.carla_world.get_map().get_spawn_points()[2]
-        vehicle = self.carla_world.spawn_actor(vehicle_bp, vehicle_transform)
-        vehicle.set_autopilot(True)
+        self.vehicle = self.carla_world.spawn_actor(vehicle_bp, vehicle_transform)
+        self.vehicle.set_autopilot(True)
         
-        self.lidar_t = lidar_carla(self.carla_world, vehicle)
+        self.lidar_t = lidar_carla(self.carla_world, self.vehicle, pcs_cache=False)
         self.lidar_t.init_lidar()
             
     def generate_lidar_bp(self, arg, world, blueprint_library, delta):

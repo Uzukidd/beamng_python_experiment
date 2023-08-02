@@ -85,7 +85,7 @@ class beamng_client:
         vehicle = active_vehicles["vehicleA"]
         vehicle.connect(self.beamng_terminal)
         vehicle.ai.set_mode('disabled')
-        self.lidar_t = lidar(self.beamng_terminal, vehicle, lidar_para, callback, self.logger)
+        self.lidar_t = lidar(self.beamng_terminal, vehicle, lidar_para, callback, self.logger, pcs_cache=True)
         # lidar_t.start_stream()
         
         
