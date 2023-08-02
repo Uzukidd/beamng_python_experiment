@@ -294,4 +294,6 @@ class beamng_point_cloud_dataset(point_cloud_dataset_base):
         return super().__getitem__(index)
     
 
+    
+
 
