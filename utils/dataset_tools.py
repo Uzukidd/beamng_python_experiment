@@ -239,8 +239,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
         return ret
     
     def prepare_data(self, data_dict):
-        import time
-        before_time = time.perf_counter()
+        
         
         if data_dict.get('points', None) is not None:
             mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
@@ -249,9 +248,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         data_dict = self.transform_points_to_voxels(data_dict, self.dataset_cfg.DATA_PROCESSOR[2])
         
-        after_time = time.perf_counter()
-        data_dict["pre_time"] = after_time - before_time
-
+        
         return data_dict
     
     def __getitem__(self, index):
@@ -269,10 +266,16 @@ class point_cloud_dataset_base(torch_data.Dataset):
             input_dict['points'] = points
         
         data_dict = input_dict
-       
+        
+        import time
+        before_time = time.perf_counter()
+        
         if points is not None:
             data_dict = self.prepare_data(data_dict=input_dict)
-        
+            
+        after_time = time.perf_counter()
+        data_dict["pre_time"] = after_time - before_time
+
         return data_dict
 
 class carla_point_cloud_dataset(point_cloud_dataset_base):
