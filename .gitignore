@@ -1,5 +1,6 @@
 # customized files
 .np_cache/
+test/
 
 # Pytorch weights and cache
 *.pt
