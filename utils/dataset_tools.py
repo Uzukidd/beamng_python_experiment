@@ -240,7 +240,6 @@ class point_cloud_dataset_base(torch_data.Dataset):
     
     def prepare_data(self, data_dict):
         
-        
         if data_dict.get('points', None) is not None:
             mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
             data_dict['points'] = data_dict['points'][mask]

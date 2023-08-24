@@ -81,13 +81,15 @@ def get_transform_matrix():
                      [1,0,0],
                      [0,0,1],])
 
-def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_colors=None, draw_origin=True, confidence=None):
+def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref_scores=None, point_colors=None, draw_origin=True, confidence=None, tracks=None):
     if isinstance(points, torch.Tensor):
         points = points.cpu().numpy()
     if isinstance(gt_boxes, torch.Tensor):
         gt_boxes = gt_boxes.cpu().numpy()
     if isinstance(ref_boxes, torch.Tensor):
         ref_boxes = ref_boxes.cpu().numpy()
+    if isinstance(tracks, torch.Tensor):
+        tracks = tracks.cpu().numpy()
         
     # points[:,:3] = np.dot(points[:,:3] , get_transform_matrix().T)
 
@@ -113,8 +115,24 @@ def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref
 
     if ref_boxes is not None:
         vis = draw_box(vis, ref_boxes, (0, 1.0, 0), ref_labels, ref_scores, confidence)
+        
+    if tracks is not None:
+        vis = draw_tracks(vis, tracks, (0, 1.0, 0))
 
-
+def draw_tracks(vis, tracks, color=(0, 1.0, 0)):
+    for i in range(tracks.__len__()):
+        nodes = [node.cpu().numpy() for node in tracks[i]]
+        lines = [(i, i + 1) for i in range(nodes.__len__() - 1)]
+        colors = [color for _ in range(nodes.__len__() - 1)]
+        
+        line_set = open3d.geometry.LineSet()
+        line_set.points = open3d.utility.Vector3dVector(nodes)
+        line_set.lines = open3d.utility.Vector2iVector(lines)
+        line_set.colors = open3d.utility.Vector3dVector(colors)
+        vis.add_geometry(line_set, False)
+            
+            
+    return vis
 
 def translate_boxes_to_open3d_instance(gt_boxes):
     """
