@@ -87,7 +87,8 @@ class lidar_carla:
             "delta":0.05,
             # "rotation_frequency":"20"
         }, logger=None, pcs_cache=False, pcs_frames_cache=1) -> None:
-        self.pcs_frames = Queue(pcs_frames_cache)
+        # self.pcs_frames = Queue(pcs_frames_cache)
+        self.pcs_frames = None
         self.vehicle = vehicle
         self.carla_world = carla_world
         self.logger = logger
@@ -127,11 +128,11 @@ class lidar_carla:
         return lidar_bp
 
     def get_single_frame(self) -> np.array:
-        res = None
-        try:
-            res = self.pcs_frames.get(True, 1.0)
-        except:
-            pass
+        res = self.pcs_frames
+        # try:
+        #     res = self.pcs_frames.get(True, 1.0)
+        # except:
+        #     pass
         return res
         
     def _pcs_callback(self, point_cloud) -> None:
@@ -139,7 +140,8 @@ class lidar_carla:
         data = data.reshape((-1, 4))
         data[:, 1] = -data[:, 1] 
         # data[:, 3] = 0
-        self.pcs_frames.put(data)
+        # self.pcs_frames.put(data)
+        self.pcs_frames = data
         
         if self.pcs_cache:
             data.astype(np.float32).tofile("./.np_cache/carla_pcs.bin")

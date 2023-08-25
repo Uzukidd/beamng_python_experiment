@@ -8,12 +8,12 @@ class object_tracker_base:
     def __init__(self) -> None:
         self.objects_dict = {} # object_dict_idx -> raw_data_idx
         
-    def updates_object(self, objects:torch.Tensor) -> None:
+    def updates_object(self, box_anchors:torch.Tensor) -> None:
         raise NotImplementedError
     
     
 class mono_label_distance_tracker(object_tracker_base):
-    def __init__(self, track_length = 3) -> None:
+    def __init__(self, track_length = 3, max_movement = 1.0) -> None:
         super().__init__()
         self.raw_box_anchors = None
         self.uu_id = 0
@@ -23,6 +23,16 @@ class mono_label_distance_tracker(object_tracker_base):
         self.tracks = {}
         self.track_length = track_length
         
+        self.max_movement = max_movement
+        
+    def get_all_object(self):
+        all_uuid = list(self.objects_dict.keys())
+        for uuid in all_uuid:
+            yield uuid
+            
+    def get_raw_id(self, idx:int):
+        return self.objects_dict[idx]
+            
     def get_objects(self, idx:int):
         return self.raw_box_anchors[0, self.objects_dict[idx]]
     
@@ -62,7 +72,6 @@ class mono_label_distance_tracker(object_tracker_base):
             box_anchors = None
             updated_map = {u_id:False for u_id in self.objects_dict.keys()}
             self.__recycle_objects__(updated_map)
-            self.__overwrite_previous_map__()
         elif self.raw_box_anchors is not None:
             # print(self.raw_box_anchors, box_anchors)
             
@@ -76,20 +85,23 @@ class mono_label_distance_tracker(object_tracker_base):
             for b in range(batch_dim):
                 for n in range(knn.idx.size(1)):
                     neigh_idx = knn.idx[b, n, 0]
+                    dist = knn_dists[b, n, 0]
+                    
+                    if dist > self.max_movement:
+                        continue
+    
                     if register_map[b, neigh_idx] == -1:
                         register_map[b, neigh_idx] = n
-                    else:
-                        p1 = knn_dists[b, register_map[b, neigh_idx], 0]
-                        p2 = knn_dists[b, n, 0]
-                        if p1 > p2:
-                            register_map[b, neigh_idx] = n
+                    elif knn_dists[b, register_map[b, neigh_idx], 0] > dist:
+                        register_map[b, neigh_idx] = n
+                    
             self.__updates_object_dict__(register_map, box_anchors)
-            self.__overwrite_previous_map__()
         else:
             for b in range(batch_dim):
                 for n in range(N_dim):
                     self.__register_object__(n)
-            self.__overwrite_previous_map__()
+        
+        self.__overwrite_previous_map__()
                     
         self.raw_box_anchors = box_anchors
     
@@ -134,20 +146,88 @@ class mono_label_distance_tracker(object_tracker_base):
         
     
 class multi_classes_assemble_tracker(object_tracker_base):
-    def __init__(self, num_classes) -> None:
+    def __init__(self, num_classes, track_length = 3, max_movement = 1.0, multi_head = False, mono_tracker:mono_label_distance_tracker = None) -> None:
         super().__init__()
         self.num_classes = num_classes
-        self.mono_tracker = []
+        self.mono_tracker = mono_tracker
+        self.track_length = track_length
+        self.max_movement = max_movement
+        self.multi_head = multi_head
+        
+        self.raw_box_scores = None
+        self.raw_box_labels = None
+        
+        if self.mono_tracker is None:
+            self.build_mono_tracker()
         
     def build_mono_tracker(self) -> None:
-        for _ in range(self.num_classes):
-            self.mono_tracker.append(mono_label_distance_tracker())
+        if self.multi_head:
+            self.mono_tracker = []
+            for idx in range(self.num_classes):
+                track_length = self.track_length
+                if isinstance(track_length, list):
+                    track_length = track_length[idx]
+                
+                max_movement = self.max_movement
+                if isinstance(max_movement, list):
+                    max_movement = max_movement[idx]
+                
+                self.mono_tracker.append(mono_label_distance_tracker(track_length=track_length, max_movement=max_movement))
+            raise NotImplementedError
+        else:
+            self.mono_tracker = mono_label_distance_tracker(track_length=self.track_length, max_movement=self.max_movement)
             
+            
+    def get_all_object(self):
+        if self.multi_head:
+            raise NotImplementedError
+        else:
+            bounding_boxes = []
+            box_scores = []
+            box_labels = []
+            tracks = []
+            for uuid in self.mono_tracker.get_all_object():
+                raw_data_id = self.mono_tracker.get_raw_id(uuid)
+                bounding_boxes.append(self.mono_tracker.get_objects(uuid))
+                box_scores.append(self.raw_box_scores[0, raw_data_id])
+                box_labels.append(self.raw_box_labels[0, raw_data_id])
+                tracks.append(self.mono_tracker.get_track(uuid))
+                
+            bounding_boxes = torch.stack(bounding_boxes) if bounding_boxes.__len__() != 0 else None
+            box_scores = torch.stack(box_scores) if box_scores.__len__() != 0 else None
+            box_labels = torch.stack(box_labels) if box_labels.__len__() != 0 else None
+        
+        return bounding_boxes, box_scores, box_labels, tracks
     
-    def updates_object(self, objects_list:List[torch.Tensor]) -> None:
+    # def get_all_bounding_box(self):
+    #     if self.multi_head:
+    #         raise NotImplementedError
+    #     else:
+    #         return self.mono_tracker.get_all_bounding_box()
+
+    # def get_all_tracks(self):
+    #     if self.multi_head:
+    #         raise NotImplementedError
+    #     else:
+    #         return self.mono_tracker.get_all_tracks()
+    
+    def get_last_uuid(self):
+        if self.multi_head:
+            raise NotImplementedError
+        else:
+            return self.mono_tracker.get_last_uuid()
+        
+    
+    def updates_object(self, box_anchors:torch.Tensor, box_labels:torch.Tensor, box_scores:torch.Tensor) -> None:
         """
             center = gt_boxes[0:3]
             lwh = gt_boxes[3:6]
             axis_angles = np.array([0, 0, gt_boxes[6] + 1e-10])
         """
-        raise NotImplementedError
+        if self.multi_head:
+            raise NotImplementedError
+        else:
+            self.mono_tracker.updates_object(box_anchors)
+            self.raw_box_scores = box_scores
+            self.raw_box_labels = box_labels
+        # raise NotImplementedError

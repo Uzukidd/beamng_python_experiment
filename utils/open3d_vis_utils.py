@@ -117,18 +117,25 @@ def draw_scenes(vis, points, gt_boxes=None, ref_boxes=None, ref_labels=None, ref
         vis = draw_box(vis, ref_boxes, (0, 1.0, 0), ref_labels, ref_scores, confidence)
         
     if tracks is not None:
-        vis = draw_tracks(vis, tracks, (0, 1.0, 0))
+        vis = draw_tracks(vis, tracks, (0, 1.0, 0), ref_labels)
 
-def draw_tracks(vis, tracks, color=(0, 1.0, 0)):
+def draw_tracks(vis, tracks, color=(0, 1.0, 0), ref_labels=None):
     for i in range(tracks.__len__()):
+        
+        if ref_labels is None:
+            uni_color = color
+        else:
+            uni_color = box_colormap[ref_labels[i]]
+            
         nodes = [node.cpu().numpy() for node in tracks[i]]
         lines = [(i, i + 1) for i in range(nodes.__len__() - 1)]
-        colors = [color for _ in range(nodes.__len__() - 1)]
+        colors = [uni_color for _ in range(nodes.__len__() - 1)]
         
         line_set = open3d.geometry.LineSet()
         line_set.points = open3d.utility.Vector3dVector(nodes)
         line_set.lines = open3d.utility.Vector2iVector(lines)
         line_set.colors = open3d.utility.Vector3dVector(colors)
+        
         vis.add_geometry(line_set, False)
             
             
