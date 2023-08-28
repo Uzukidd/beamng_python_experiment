@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from pytorch3d.ops import knn_points, knn_gather
 from collections import deque
 
@@ -173,14 +174,27 @@ class multi_classes_assemble_tracker(object_tracker_base):
                     max_movement = max_movement[idx]
                 
                 self.mono_tracker.append(mono_label_distance_tracker(track_length=track_length, max_movement=max_movement))
-            raise NotImplementedError
         else:
             self.mono_tracker = mono_label_distance_tracker(track_length=self.track_length, max_movement=self.max_movement)
             
             
     def get_all_object(self):
         if self.multi_head:
-            raise NotImplementedError
+            bounding_boxes = []
+            box_scores = []
+            box_labels = []
+            tracks = []
+            for label in range(self.num_classes):
+                for uuid in self.mono_tracker[label].get_all_object():
+                    raw_data_id = self.mono_tracker[label].get_raw_id(uuid)
+                    bounding_boxes.append(self.mono_tracker[label].get_objects(uuid))
+                    box_scores.append(self.raw_box_scores[label][raw_data_id])
+                    box_labels.append(self.raw_box_labels[label][raw_data_id])
+                    tracks.append(self.mono_tracker[label].get_track(uuid))
+                
+            bounding_boxes = torch.stack(bounding_boxes) if bounding_boxes.__len__() != 0 else None
+            box_scores = torch.stack(box_scores) if box_scores.__len__() != 0 else None
+            box_labels = torch.stack(box_labels) if box_labels.__len__() != 0 else None
         else:
             bounding_boxes = []
             box_scores = []
@@ -213,7 +227,10 @@ class multi_classes_assemble_tracker(object_tracker_base):
     
     def get_last_uuid(self):
         if self.multi_head:
-            raise NotImplementedError
+            res = []
+            for label in range(self.num_classes):
+                res.append(self.mono_tracker[label].get_last_uuid())
+            return res
         else:
             return self.mono_tracker.get_last_uuid()
         
@@ -225,7 +242,14 @@ class multi_classes_assemble_tracker(object_tracker_base):
             axis_angles = np.array([0, 0, gt_boxes[6] + 1e-10])
         """
         if self.multi_head:
-            raise NotImplementedError
+            self.raw_box_scores = []
+            self.raw_box_labels = []
+            for label in range(self.num_classes):
+                label_idx = box_labels == label
+                self.mono_tracker[label].updates_object(box_anchors[label_idx][np.newaxis, :])
+                self.raw_box_scores.append(box_scores[label_idx])
+                self.raw_box_labels.append(box_labels[label_idx])
+                
         else:
             self.mono_tracker.updates_object(box_anchors)
             self.raw_box_scores = box_scores
