@@ -59,11 +59,6 @@ class VoxelGeneratorWrapper():
             num_points = tv_num_points.numpy()
         return voxels, coordinates, num_points
 
-def mask_points_by_range(points, limit_range):
-    mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
-           & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4])
-    return mask
-
 class point_cloud_dataset_base(torch_data.Dataset):
     def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
         super().__init__()
@@ -77,6 +72,15 @@ class point_cloud_dataset_base(torch_data.Dataset):
         self.grid_size = self.voxel_size = None
         self.voxel_generator = None
         self.logger = logger
+        
+    def cross_sensor_process(self, data_dict=None, config=None):
+        """
+            This implementation is based on https://github.com/ldkong1205/Robo3D/tree/main
+        """
+        if data_dict is None:
+            return partial(self.cross_sensor_process, config=config)
+        
+        return data_dict
         
     def transform_points_to_voxels(self, data_dict=None, config=None):
         if data_dict is None:
@@ -244,8 +248,19 @@ class point_cloud_dataset_base(torch_data.Dataset):
             mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
             data_dict['points'] = data_dict['points'][mask]
             data_dict['use_lead_xyz'] = True
+            
+        for process in self.dataset_cfg.DATA_PROCESSOR:
+            if process["NAME"] is None:
+                continue
+            
+            process_method = getattr(self, process["NAME"])
 
-        data_dict = self.transform_points_to_voxels(data_dict, self.dataset_cfg.DATA_PROCESSOR[2])
+            if process_method is not None and callable(process_method):
+                data_dict = process_method(data_dict, process)
+            else:
+                raise NotImplementedError
+
+        # data_dict = self.transform_points_to_voxels(data_dict, self.dataset_cfg.DATA_PROCESSOR[2])
         
         
         return data_dict
