@@ -74,9 +74,6 @@ class mono_label_distance_tracker(object_tracker_base):
             updated_map = {u_id:False for u_id in self.objects_dict.keys()}
             self.__recycle_objects__(updated_map)
         elif self.raw_box_anchors is not None:
-            # print(self.raw_box_anchors, box_anchors)
-            
-            
             register_map = torch.ones((batch_dim, N_dim)).int() * -1
             knn = knn_points(self.raw_box_anchors[:, :, :3], box_anchors[:, :, :3])
             # knn.idx [b, N2, K]
