@@ -1,6 +1,7 @@
 from functools import partial
 from collections import defaultdict
 
+import importlib
 import numpy as np
 import torch
 import torch.nn as nn
@@ -69,9 +70,62 @@ class point_cloud_dataset_base(torch_data.Dataset):
         self.num_point_features = len(self.dataset_cfg.POINT_FEATURE_ENCODING.used_feature_list)
         
         self.mode = 'train' if training else 'test'
+        self.data_processor_queue = []
         self.grid_size = self.voxel_size = None
         self.voxel_generator = None
         self.logger = logger
+        
+        self.init_data_processor()
+        
+    def init_data_processor(self):
+        if self.dataset_cfg.DATA_PROCESSOR is not None:
+            for process in self.dataset_cfg.DATA_PROCESSOR:
+                if process["NAME"] is None:
+                    continue
+                
+                module_call = self
+                method_name = process["NAME"]
+                if process.get('EXT_MODULE', False):
+                    module_name, method_name = process["NAME"].rsplit('.', 1)
+                    module_call = importlib.import_module(module_name)
+                
+                process_method = getattr(module_call, method_name)
+
+                if process_method is not None and callable(process_method):
+                    self.data_processor_queue.append(process_method(config = process))
+                else:
+                    raise NotImplementedError   
+        
+        
+    def motion_blur(self, data_dict=None, config=None):
+        """
+            This implementation is based on https://github.com/ldkong1205/Robo3D/tree/main
+        """
+        if data_dict is None:
+            return partial(self.motion_blur, config=config)
+        
+        points = data_dict["points"]
+        assert points is not None
+
+        noise_translate = np.array([
+            np.random.normal(0, config.TRANS_STD[0], 1),
+            np.random.normal(0, config.TRANS_STD[1], 1),
+            np.random.normal(0, config.TRANS_STD[2], 1),
+            ]).T
+
+        points[:, 0:3] += noise_translate
+        num_points = points.shape[0]
+        jitters_x = np.clip(np.random.normal(loc=0.0, scale=config.TRANS_STD[0]*0.1, size=num_points), -3 * config.TRANS_STD[0], 3 * config.TRANS_STD[0])
+        jitters_y = np.clip(np.random.normal(loc=0.0, scale=config.TRANS_STD[1]*0.1, size=num_points), -3 * config.TRANS_STD[1], 3 * config.TRANS_STD[1])
+        jitters_z = np.clip(np.random.normal(loc=0.0, scale=config.TRANS_STD[2]*0.05, size=num_points), -3 * config.TRANS_STD[2], 3 * config.TRANS_STD[2])
+
+        points[:, 0] += jitters_x
+        points[:, 1] += jitters_y
+        points[:, 2] += jitters_z
+        
+        data_dict["points"] = points
+        
+        return data_dict
         
     def cross_sensor_process(self, data_dict=None, config=None):
         """
@@ -80,6 +134,53 @@ class point_cloud_dataset_base(torch_data.Dataset):
         if data_dict is None:
             return partial(self.cross_sensor_process, config=config)
         
+        def _get_kitti_ringID(scan, normal_vector=np.array([0, 0, 1]), threshold=0.00022):
+            normal_vector = np.array([0, 0, 1])
+            angle_radians = np.arccos(np.dot(scan[:, :3], normal_vector) / (np.linalg.norm(scan[:, :3], axis=1) * np.linalg.norm(normal_vector)))
+            new_idx = np.argsort(angle_radians)
+            
+            angle_radians = angle_radians[new_idx]
+            diff = angle_radians[1:] - angle_radians[:-1]
+            new_raw = np.nonzero(diff >= threshold)[0] + 1
+            
+            proj_y = np.zeros_like(angle_radians)
+            proj_y[new_raw] = 1
+            ringID = np.cumsum(proj_y)
+            ringID = np.clip(ringID, 0, 63)
+            ringID[new_idx] = ringID
+            return ringID, new_idx
+        
+        # get beam id
+        scan = data_dict["points"]
+        beam_id = _get_kitti_ringID(scan)
+        beam_id = beam_id.astype(np.int64)
+
+        if config.NUM_BEAM_TO_DROP == 16:
+            to_drop = np.arange(1, 64, 4)
+            assert len(to_drop) == 16
+        
+        elif config.NUM_BEAM_TO_DROP == 32:
+            to_drop = np.arange(1, 64, 2)
+            assert len(to_drop) == 32
+
+        elif config.NUM_BEAM_TO_DROP == 48:
+            to_drop = np.arange(1, 64, 1.33)
+            to_drop = to_drop.astype(int)
+            assert len(to_drop) == 48
+
+        to_keep = [i for i in np.arange(0, 64, 1) if i not in to_drop]
+        assert len(to_drop) + len(to_keep) == 64
+
+
+        for id in to_drop:
+            points_to_drop = beam_id == id
+            scan = np.delete(scan, points_to_drop, axis=0)
+
+            beam_id = np.delete(beam_id, points_to_drop, axis=0)
+
+        scan = scan[::2, :]
+        data_dict["points"] = scan
+
         return data_dict
         
     def transform_points_to_voxels(self, data_dict=None, config=None):
@@ -243,25 +344,17 @@ class point_cloud_dataset_base(torch_data.Dataset):
         return ret
     
     def prepare_data(self, data_dict):
+        """
+            \"points\": Tensor[N, 4] -> [N, (r, x, y, z)]
+        """
         
         if data_dict.get('points', None) is not None:
             mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
             data_dict['points'] = data_dict['points'][mask]
             data_dict['use_lead_xyz'] = True
-            
-        for process in self.dataset_cfg.DATA_PROCESSOR:
-            if process["NAME"] is None:
-                continue
-            
-            process_method = getattr(self, process["NAME"])
-
-            if process_method is not None and callable(process_method):
-                data_dict = process_method(data_dict, process)
-            else:
-                raise NotImplementedError
-
-        # data_dict = self.transform_points_to_voxels(data_dict, self.dataset_cfg.DATA_PROCESSOR[2])
         
+        for process in self.data_processor_queue:
+            data_dict = process(data_dict)
         
         return data_dict
     
