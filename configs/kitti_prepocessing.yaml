@@ -1,16 +1,22 @@
 CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
 DATA_CONFIG: 
-    POINT_CLOUD_RANGE: [0.0, -39.68, -3, 69.12, 39.68, 1]
+    POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
     POINT_FEATURE_ENCODING: {
       encoding_type: absolute_coordinates_encoding,
       used_feature_list: ['x', 'y', 'z', 'intensity'],
       src_feature_list: ['x', 'y', 'z', 'intensity'],
     }
     DATA_PROCESSOR:
-        - NAME: cross_sensor_process
-          num_beam_to_drop: 16
-          
+        # - NAME: utils.mods.pre_pocessing.robo3d.cross_sensor_process
+        #   EXT_MODULE: True
+        #   NUM_BEAM_TO_DROP: 32
+
+        # - NAME: utils.mods.pre_pocessing.robo3d.motion_blur
+        #   EXT_MODULE: True
+        #   TRANS_STD: [0.08, 0.08, 0.08]
+        # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]    
+
         - NAME: transform_points_to_voxels
           VOXEL_SIZE: [0.16, 0.16, 4]
           MAX_POINTS_PER_VOXEL: 32
