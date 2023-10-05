@@ -8,6 +8,15 @@ DATA_CONFIG:
       src_feature_list: ['x', 'y', 'z', 'intensity'],
     }
     DATA_PROCESSOR:
+        - NAME: utils.mods.pre_pocessing.robo3d.simulate_fog
+          EXT_MODULE: True
+          GAIN: False
+          INTE_NAME: integral_lookup_tables_seg_light_0.008beta
+          NOISE: 10
+          BETA: 0.2
+          NOISE_VARIANT: V1
+        # beta = [0.008, 0.05, 0.2]
+
         # - NAME: utils.mods.pre_pocessing.robo3d.cross_sensor_process
         #   EXT_MODULE: True
         #   NUM_BEAM_TO_DROP: 32
