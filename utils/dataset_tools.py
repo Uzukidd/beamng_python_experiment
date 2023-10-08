@@ -68,6 +68,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
         self.training = training
         self.num_point_features = len(self.dataset_cfg.POINT_FEATURE_ENCODING.used_feature_list)
+        self.root_path = root_path
         
         self.mode = 'train' if training else 'test'
         self.data_processor_queue = []
@@ -94,7 +95,15 @@ class point_cloud_dataset_base(torch_data.Dataset):
                 if process_method is not None and callable(process_method):
                     self.data_processor_queue.append(process_method(config = process))
                 else:
-                    raise NotImplementedError   
+                    raise NotImplementedError
+                
+    def raw_data_remain(self, data_dict=None, config=None):
+        if data_dict is None:
+            return partial(self.raw_data_remain, config=config)
+        
+        data_dict["raw_points"] = np.copy(data_dict["points"])
+        
+        return data_dict
         
     def transform_points_to_voxels(self, data_dict=None, config=None):
         if data_dict is None:
@@ -167,7 +176,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
                         batch_size_ratio = len(val[0])
                         val = [i for item in val for i in item]
                     ret[key] = np.concatenate(val, axis=0)
-                elif key in ['points', 'voxel_coords']:
+                elif key in ['raw_points', 'points', 'voxel_coords']:
                     coors = []
                     if isinstance(val[0], list):
                         val =  [i for item in val for i in item]
@@ -258,12 +267,13 @@ class point_cloud_dataset_base(torch_data.Dataset):
     
     def prepare_data(self, data_dict):
         """
-            \"points\": Tensor[N, 4] -> [N, (r, x, y, z)]
+            \"points\": Tensor[N, 4] : [N, (x, y, z, r)]
         """
         
         if data_dict.get('points', None) is not None:
             mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
             data_dict['points'] = data_dict['points'][mask]
+            data_dict['intensity'] = data_dict['intensity'][mask]
             data_dict['use_lead_xyz'] = True
         
         for process in self.data_processor_queue:
@@ -271,8 +281,9 @@ class point_cloud_dataset_base(torch_data.Dataset):
         
         return data_dict
     
-    def __getitem__(self, index):
-        points = self.lidar.get_single_frame()
+    def __getitem__(self, index, points=None):
+        if points is None:
+            points = self.lidar.get_single_frame()
         
         input_dict = {
             'points': None,
@@ -281,7 +292,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
         
         if points is not None:
             points = points.reshape(-1, 4)
-            input_dict['intensity'] = points[:, 3]
+            input_dict['intensity'] = points[:, 3].copy()
             points[:, 3] = 0
             input_dict['points'] = points
         
@@ -316,7 +327,17 @@ class beamng_point_cloud_dataset(point_cloud_dataset_base):
     def __getitem__(self, index):
         return super().__getitem__(index)
     
-
+class file_point_cloud_dataset(point_cloud_dataset_base):
+    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None) -> None:
+        super().__init__(
+            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=None
+        )
+        self.root_path = root_path
+        
+    def __getitem__(self, index):
+        points = np.fromfile(self.root_path, dtype=np.float32)
+        points = points.reshape((-1, 4))
+        return super().__getitem__(index, points)
     
 
 

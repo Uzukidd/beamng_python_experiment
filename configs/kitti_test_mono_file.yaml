@@ -18,26 +18,8 @@ DATA_CONFIG:
           INTE_NAME: integral_lookup_tables_seg_light_0.008beta
           NOISE: 10
           BETA: 0.2
-          NOISE_VARIANT: V1
+          NOISE_VARIANT: v1
         # beta = [0.008, 0.05, 0.2]
-
-        # - NAME: utils.mods.pre_pocessing.robo3d.cross_sensor_process
-        #   EXT_MODULE: True
-        #   NUM_BEAM_TO_DROP: 32
-
-        # - NAME: utils.mods.pre_pocessing.robo3d.motion_blur
-        #   EXT_MODULE: True
-        #   TRANS_STD: [0.10, 0.10, 0.10]
-        # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]    
-
-        - NAME: transform_points_to_voxels
-          VOXEL_SIZE: [0.16, 0.16, 4]
-          MAX_POINTS_PER_VOXEL: 32
-          MAX_NUMBER_OF_VOXELS: {
-            'train': 16000,
-            'test': 40000
-          }
-
 
 
 MODEL:
@@ -55,25 +37,3 @@ MODEL:
             NMS_THRESH: 0.01
             NMS_PRE_MAXSIZE: 4096
             NMS_POST_MAXSIZE: 500
-
-
-OPTIMIZATION:
-    BATCH_SIZE_PER_GPU: 4
-    NUM_EPOCHS: 80
-
-    OPTIMIZER: adam_onecycle
-    LR: 0.003
-    WEIGHT_DECAY: 0.01
-    MOMENTUM: 0.9
-
-    MOMS: [0.95, 0.85]
-    PCT_START: 0.4
-    DIV_FACTOR: 10
-    DECAY_STEP_LIST: [35, 45]
-    LR_DECAY: 0.1
-    LR_CLIP: 0.0000001
-
-    LR_WARMUP: False
-    WARMUP_EPOCH: 1
-
-    GRAD_NORM_CLIP: 10

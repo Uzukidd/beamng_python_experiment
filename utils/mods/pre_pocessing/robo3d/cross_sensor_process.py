@@ -24,7 +24,7 @@ def cross_sensor_process(data_dict=None, config=None):
         ringID = np.cumsum(proj_y)
         ringID = np.clip(ringID, 0, 63)
         ringID[new_idx] = ringID
-        return ringID, new_idx
+        return ringID
     
     # get beam id
     scan = data_dict["points"]
