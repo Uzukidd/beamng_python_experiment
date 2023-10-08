@@ -280,7 +280,7 @@ def P_R_fog_soft(p: ParameterSet, pc: np.ndarray, original_intesity: np.ndarray,
     return augmented_pc, simulated_fog_pc, num_fog, info_dict
 
 
-def simulate_fog(data_dict=None, config=None, hard: bool = False, soft: bool = True) -> np.ndarray:
+def simulate_fog(data_dict=None, config=None) -> np.ndarray:
     """
         This implementation is based on https://github.com/ldkong1205/Robo3D/tree/main
     """
@@ -292,8 +292,10 @@ def simulate_fog(data_dict=None, config=None, hard: bool = False, soft: bool = T
     gain = config.GAIN
     beta = config.BETA
     inte_name = config.INTE_NAME
+    intensity = config.INTENSITY
     
     pc = data_dict["points"]
+    pc[:, 3] = data_dict["intensity"]
     
     thresholds = [0.0, 0.005, 0.01, 0.02, 0.03, 0.06]
     available_alpha = np.random.choice(thresholds, size=1)[0]
@@ -305,13 +307,14 @@ def simulate_fog(data_dict=None, config=None, hard: bool = False, soft: bool = T
     info_dict = None
     simulated_fog_pc = None
 
-    if hard:
+    if intensity == "hard":
         augmented_pc = P_R_fog_hard(parameter_set, augmented_pc)
-    if soft:
+    elif intensity == "soft":
         augmented_pc, simulated_fog_pc, num_fog, info_dict = P_R_fog_soft(parameter_set, augmented_pc, original_intensity, noise, gain,
                                                                  noise_variant)
 
     data_dict["points"] = augmented_pc
+    # print(num_fog)
 
     return data_dict #, simulated_fog_pc, num_fog, info_dict
 
