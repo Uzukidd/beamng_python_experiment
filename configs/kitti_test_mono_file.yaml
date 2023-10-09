@@ -7,19 +7,34 @@ DATA_CONFIG:
       used_feature_list: ['x', 'y', 'z', 'intensity'],
       src_feature_list: ['x', 'y', 'z', 'intensity'],
     }
+    PREVIEW_CHANNEL: ["raw", "cross_sensor", "simulate_fog", "motion_blur"]
     DATA_PROCESSOR:
-        - NAME: raw_data_remain
+        raw:
+          - NAME: raw_data_remain
 
-        - NAME: utils.mods.pre_pocessing.robo3d.simulate_fog
-          EXT_MODULE: True
-          INTENSITY: soft
-        # intensity:[soft, hard]
-          GAIN: False
-          INTE_NAME: integral_lookup_tables_seg_light_0.008beta
-          NOISE: 10
-          BETA: 0.2
-          NOISE_VARIANT: v1
-        # beta = [0.008, 0.05, 0.2]
+        cross_sensor:
+          - NAME: utils.mods.pre_pocessing.robo3d.cross_sensor_process
+            EXT_MODULE: True
+            NUM_BEAM_TO_DROP: 32
+
+        simulate_fog:
+          - NAME: utils.mods.pre_pocessing.robo3d.simulate_fog
+            EXT_MODULE: True
+            INTENSITY: soft
+          # intensity:[soft, hard]
+            GAIN: False
+            INTE_NAME: integral_lookup_tables_seg_light_0.008beta
+            NOISE: 10
+            BETA: 0.2
+            NOISE_VARIANT: v1
+          # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]  
+          # beta = [0.008, 0.05, 0.2]
+
+        motion_blur:
+          - NAME: utils.mods.pre_pocessing.robo3d.motion_blur
+            EXT_MODULE: True
+            TRANS_STD: [0.10, 0.10, 0.10]
+          # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]   
 
 
 MODEL:

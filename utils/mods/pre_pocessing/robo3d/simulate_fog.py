@@ -312,8 +312,9 @@ def simulate_fog(data_dict=None, config=None) -> np.ndarray:
     elif intensity == "soft":
         augmented_pc, simulated_fog_pc, num_fog, info_dict = P_R_fog_soft(parameter_set, augmented_pc, original_intensity, noise, gain,
                                                                  noise_variant)
-
+    augmented_pc[:, 3] = 0
     data_dict["points"] = augmented_pc
+    
     # print(num_fog)
 
     return data_dict #, simulated_fog_pc, num_fog, info_dict
