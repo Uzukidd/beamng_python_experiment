@@ -1,6 +1,7 @@
 from functools import partial
 from collections import defaultdict
 
+import copy
 import importlib
 import numpy as np
 import torch
@@ -71,7 +72,8 @@ class point_cloud_dataset_base(torch_data.Dataset):
         self.root_path = root_path
         
         self.mode = 'train' if training else 'test'
-        self.data_processor_queue = []
+        self.preview_channel = self.dataset_cfg.PREVIEW_CHANNEL
+        self.data_processor_queue = {}
         self.grid_size = self.voxel_size = None
         self.voxel_generator = None
         self.logger = logger
@@ -80,22 +82,24 @@ class point_cloud_dataset_base(torch_data.Dataset):
         
     def init_data_processor(self):
         if self.dataset_cfg.DATA_PROCESSOR is not None:
-            for process in self.dataset_cfg.DATA_PROCESSOR:
-                if process["NAME"] is None:
-                    continue
-                
-                module_call = self
-                method_name = process["NAME"]
-                if process.get('EXT_MODULE', False):
-                    module_name, method_name = process["NAME"].rsplit('.', 1)
-                    module_call = importlib.import_module(module_name)
-                
-                process_method = getattr(module_call, method_name)
+            for channel_name, channel in self.dataset_cfg.DATA_PROCESSOR.items():
+                self.data_processor_queue[channel_name] = []
+                for process in channel:
+                    if process["NAME"] is None:
+                        continue
+                    
+                    module_call = self
+                    method_name = process["NAME"]
+                    if process.get('EXT_MODULE', False):
+                        module_name, method_name = process["NAME"].rsplit('.', 1)
+                        module_call = importlib.import_module(module_name)
+                    
+                    process_method = getattr(module_call, method_name)
 
-                if process_method is not None and callable(process_method):
-                    self.data_processor_queue.append(process_method(config = process))
-                else:
-                    raise NotImplementedError
+                    if process_method is not None and callable(process_method):
+                        self.data_processor_queue[channel_name].append(process_method(config = process))
+                    else:
+                        raise NotImplementedError
                 
     def raw_data_remain(self, data_dict=None, config=None):
         if data_dict is None:
@@ -265,7 +269,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
         ret['batch_size'] = batch_size * batch_size_ratio
         return ret
     
-    def prepare_data(self, data_dict):
+    def prepare_data(self, data_dict, channel_name):
         """
             \"points\": Tensor[N, 4] : [N, (x, y, z, r)]
         """
@@ -276,7 +280,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
             data_dict['intensity'] = data_dict['intensity'][mask]
             data_dict['use_lead_xyz'] = True
         
-        for process in self.data_processor_queue:
+        for process in self.data_processor_queue[channel_name]:
             data_dict = process(data_dict)
         
         return data_dict
@@ -296,16 +300,18 @@ class point_cloud_dataset_base(torch_data.Dataset):
             points[:, 3] = 0
             input_dict['points'] = points
         
-        data_dict = input_dict
+        data_dict = {}
         
         import time
-        before_time = time.perf_counter()
         
         if points is not None:
-            data_dict = self.prepare_data(data_dict=input_dict)
+            for channel_name in self.data_processor_queue:
+                before_time = time.perf_counter()
+                data_dict[channel_name] = self.prepare_data(data_dict=copy.deepcopy(input_dict), channel_name=channel_name)
+                after_time = time.perf_counter()
+                data_dict[channel_name]["pre_time"] = after_time - before_time
             
-        after_time = time.perf_counter()
-        data_dict["pre_time"] = after_time - before_time
+        # data_dict["pre_time"] = after_time - before_time
 
         return data_dict
 
