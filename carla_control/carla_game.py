@@ -8,12 +8,13 @@ import open3d as o3d
 from sensor_std import lidar_carla
 
 class carla_client:
-    def __init__(self, host = "127.0.0.1", port = 2000, rendering = True) -> None:
+    def __init__(self, host = "127.0.0.1", port = 2000, rendering = True, logger=None) -> None:
         self.carla_client = None
         self.carla_world = None
         self.host = host
         self.port = port
         self.rendering = rendering
+        self.logger = logger
         
         self.lidar_t = None
         # self.tick_thread = Thread(target=self.world_tick, args=[])
@@ -23,7 +24,7 @@ class carla_client:
         self.carla_client.set_timeout(timeout)
         
     def start_client(self) -> None:
-        self.carla_world = self.carla_client.get_world()
+        self.carla_world = self.carla_client.load_world('Town01')
         
     def debug_luanch_test(self) -> None:
         original_settings = self.carla_world.get_settings()
@@ -40,11 +41,12 @@ class carla_client:
 
         blueprint_library = self.carla_world.get_blueprint_library()
         vehicle_bp = blueprint_library.filter("model3")[0]
-        vehicle_transform = self.carla_world.get_map().get_spawn_points()[2]
+        vehicle_transform = self.carla_world.get_map().get_spawn_points()
+        vehicle_transform = np.random.choice(vehicle_transform)
         self.vehicle = self.carla_world.spawn_actor(vehicle_bp, vehicle_transform)
         self.vehicle.set_autopilot(True)
         
-        self.lidar_t = lidar_carla(self.carla_world, self.vehicle, pcs_cache=False)
+        self.lidar_t = lidar_carla(self.carla_world, self.vehicle, pcs_cache=False, need_gt=True)
         self.lidar_t.init_lidar()
             
     def generate_lidar_bp(self, arg, world, blueprint_library, delta):
