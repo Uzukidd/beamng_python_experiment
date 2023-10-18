@@ -17,12 +17,13 @@ import numpy as np
 from queue import Queue
 
 class lidar:
-    def __init__(self, client, vehicle, lidar_para={}, callback=None, logger=None, pcs_cache=False) -> None:
+    def __init__(self, client, vehicle, lidar_para={}, callback=None, logger=None, need_gt=False, pcs_cache=False) -> None:
         self.stream_thread = Thread(target=self.update_stream, args=[])
         self.vehicle = vehicle
         self.callback = callback
         self.lidar = Lidar('lidar', client, vehicle, **lidar_para)
         self.logger = logger
+        self.need_gt = need_gt
         
         self.pcs_cache = pcs_cache
 
@@ -86,7 +87,7 @@ class lidar_carla:
             "no_noise":True,
             "delta":0.05,
             # "rotation_frequency":"20"
-        }, logger=None, pcs_cache=False, pcs_frames_cache=1) -> None:
+        }, logger=None, need_gt=False, pcs_cache=False, pcs_frames_cache=1) -> None:
         # self.pcs_frames = Queue(pcs_frames_cache)
         self.pcs_frames = None
         self.vehicle = vehicle
@@ -94,6 +95,9 @@ class lidar_carla:
         self.logger = logger
         self.lidar_para = lidar_para
         self.lidar = None
+        
+        self.need_gt = need_gt
+        self.ground_truth = None
         
         self.pcs_cache = pcs_cache
         
@@ -126,14 +130,63 @@ class lidar_carla:
         lidar_bp.set_attribute('rotation_frequency', str(1/arg["delta"]))
         lidar_bp.set_attribute('points_per_second', str(arg["points_per_second"]))
         return lidar_bp
+    
+    def _update_ground_truth(self) -> None:
+        ground_truth = []
+        def rotate(points, yaw):
+            theta = yaw
+            R_z = np.array([[np.cos(theta), -np.sin(theta), 0],
+                        [np.sin(theta), np.cos(theta), 0],
+                        [0, 0, 1]])
+            
+            points = np.dot(points, R_z)
+            return points
+        
+        for npc in self.carla_world.get_actors().filter('*vehicle*'):
+            if npc.id != self.vehicle.id:
+                dist = npc.get_transform().location.distance(self.lidar.get_transform().location)
+                
+                if dist < 120:
+                    
+                    # coordinate transformation bbox -> world -> lidar(ego vehicle)
+                    bounding_box_loc = npc.bounding_box.location + npc.get_transform().location - self.lidar.get_transform().location
+                    bounding_box_lwh = npc.bounding_box.extent
+                    bounding_box_rot = npc.bounding_box.rotation.yaw + npc.get_transform().rotation.yaw - self.lidar.get_transform().rotation.yaw
+
+                    boudning_box_np = np.zeros(7)
+                    
+                    boudning_box_np[0] = bounding_box_loc.x
+                    boudning_box_np[1] = bounding_box_loc.y
+                    boudning_box_np[2] = bounding_box_loc.z
+                    
+                    # semi lwh -> full lwh
+                    boudning_box_np[3] = bounding_box_lwh.x * 2.0
+                    boudning_box_np[4] = bounding_box_lwh.y * 2.0
+                    boudning_box_np[5] = bounding_box_lwh.z * 2.0
+                    
+                    boudning_box_np[6] = -np.radians(bounding_box_rot)
+                    
+                    boudning_box_np[0:3] = rotate(boudning_box_np[0:3], np.radians(self.lidar.get_transform().rotation.yaw))
+                    boudning_box_np[1] = -boudning_box_np[1]
+                    ground_truth.append(boudning_box_np)
+        
+        if ground_truth.__len__() != 0:
+            self.ground_truth = np.stack(ground_truth)
+        else:
+            self.ground_truth = None
+            
 
     def get_single_frame(self) -> np.array:
         res = self.pcs_frames
+        if self.need_gt:
+            self._update_ground_truth()
         # try:
         #     res = self.pcs_frames.get(True, 1.0)
         # except:
         #     pass
-        return res
+        return res, self.ground_truth
+    
+    
         
     def _pcs_callback(self, point_cloud) -> None:
         data = np.copy(np.frombuffer(point_cloud.raw_data, dtype=np.dtype('f4')))

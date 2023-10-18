@@ -1,6 +1,7 @@
 from functools import partial
 from collections import defaultdict
 
+import os
 import copy
 import importlib
 import numpy as np
@@ -65,17 +66,21 @@ class point_cloud_dataset_base(torch_data.Dataset):
     def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
         super().__init__()
         self.lidar = lidar
+        self.idx = 0
+        self.class_names = class_names
         self.dataset_cfg = dataset_cfg
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
         self.training = training
         self.num_point_features = len(self.dataset_cfg.POINT_FEATURE_ENCODING.used_feature_list)
         self.root_path = root_path
-        
         self.mode = 'train' if training else 'test'
+        
         self.preview_channel = self.dataset_cfg.PREVIEW_CHANNEL
         self.data_processor_queue = {}
+        
         self.grid_size = self.voxel_size = None
         self.voxel_generator = None
+        
         self.logger = logger
         
         self.init_data_processor()
@@ -100,6 +105,26 @@ class point_cloud_dataset_base(torch_data.Dataset):
                         self.data_processor_queue[channel_name].append(process_method(config = process))
                     else:
                         raise NotImplementedError
+    
+    
+    def sample_cache(self, data_dict=None, config=None):
+        if data_dict is None:
+            return partial(self.sample_cache, config=config)
+        
+        file_path = config.get("FILENAME", None)
+        frequency = config.get("SAMPLE_FREQUENCY", 50)
+        points = data_dict.get("points", None)
+        gt = data_dict.get("gt_boxes", None)
+        
+        if self.idx % frequency == 0:
+            filename = f"{int(self.idx / frequency):05d}"
+            if points is not None \
+                and gt is not None \
+                and file_path is not None:
+                    np.save(os.path.join(file_path, "points", filename), points)
+                    np.save(os.path.join(file_path, "gt", filename), gt)
+        
+        return data_dict
                 
     def raw_data_remain(self, data_dict=None, config=None):
         if data_dict is None:
@@ -158,10 +183,26 @@ class point_cloud_dataset_base(torch_data.Dataset):
             data_dict['voxel_num_points'] = num_points
         return data_dict
     
-    def mask_points_by_range(self, points, limit_range):
+    def mask_points_by_range(self, data_dict=None, config=None):
+        if data_dict is None:
+            return partial(self.mask_points_by_range, config=config)
+        points = data_dict["points"]
+        gt = data_dict.get("gt_boxes", None)
+        limit_range = config["POINT_CLOUD_RANGE"]
+        
         mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
             & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4])
-        return mask
+        
+        data_dict['points'] = data_dict['points'][mask]
+        data_dict['intensity'] = data_dict['intensity'][mask]
+        data_dict['use_lead_xyz'] = True
+        
+        if gt is not None:
+            mask = (gt[:, 0] >= limit_range[0]) & (gt[:, 0] <= limit_range[3]) \
+            & (gt[:, 1] >= limit_range[1]) & (gt[:, 1] <= limit_range[4])
+            data_dict["gt_boxes"] = data_dict["gt_boxes"][mask]
+        
+        return data_dict
     
     @staticmethod
     def collate_batch(batch_list, _unused=False):
@@ -274,25 +315,29 @@ class point_cloud_dataset_base(torch_data.Dataset):
             \"points\": Tensor[N, 4] : [N, (x, y, z, r)]
         """
         
-        if data_dict.get('points', None) is not None:
-            mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
-            data_dict['points'] = data_dict['points'][mask]
-            data_dict['intensity'] = data_dict['intensity'][mask]
-            data_dict['use_lead_xyz'] = True
+        # if data_dict.get('points', None) is not None:
+        #     mask = self.mask_points_by_range(data_dict['points'], self.point_cloud_range)
+        #     data_dict['points'] = data_dict['points'][mask]
+        #     data_dict['intensity'] = data_dict['intensity'][mask]
+        #     data_dict['use_lead_xyz'] = True
         
         for process in self.data_processor_queue[channel_name]:
             data_dict = process(data_dict)
         
         return data_dict
     
-    def __getitem__(self, index, points=None):
+    def __getitem__(self, index, points=None, gt=None):
         if points is None:
-            points = self.lidar.get_single_frame()
+            self.idx = self.idx + 1
+            points, gt = self.lidar.get_single_frame()
         
         input_dict = {
             'points': None,
             'intensity': None,
         }
+        
+        if gt is not None:
+            input_dict["gt_boxes"] = gt
         
         if points is not None:
             points = points.reshape(-1, 4)
@@ -307,10 +352,16 @@ class point_cloud_dataset_base(torch_data.Dataset):
         if points is not None:
             for channel_name in self.data_processor_queue:
                 before_time = time.perf_counter()
-                data_dict[channel_name] = self.prepare_data(data_dict=copy.deepcopy(input_dict), channel_name=channel_name)
+                
+                temp_dict = input_dict
+                if self.data_processor_queue.__len__() > 1:
+                    temp_dict = copy.deepcopy(temp_dict)
+                
+                data_dict[channel_name] = self.prepare_data(data_dict=temp_dict, channel_name=channel_name)
                 after_time = time.perf_counter()
                 data_dict[channel_name]["pre_time"] = after_time - before_time
             
+        del input_dict
         # data_dict["pre_time"] = after_time - before_time
 
         return data_dict
@@ -339,11 +390,22 @@ class file_point_cloud_dataset(point_cloud_dataset_base):
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=None
         )
         self.root_path = root_path
+        self.filenames = os.listdir(os.path.join(self.root_path, "points"))
+        print(self.filenames)
+        
+        self.points = []
+        self.gt = []
+        
+        for name in self.filenames:
+            self.points.append(np.load(os.path.join(self.root_path, "points", name)))
+            try:
+                self.gt.append(np.load(os.path.join(self.root_path, "gt", name)))
+            except:
+                self.gt.append(None)
+        
         
     def __getitem__(self, index):
-        points = np.fromfile(self.root_path, dtype=np.float32)
-        points = points.reshape((-1, 4))
-        return super().__getitem__(index, points)
+        return super().__getitem__(index, self.points[index], self.gt[index])
     
 
 

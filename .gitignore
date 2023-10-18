@@ -1,5 +1,6 @@
 # customized files
 .np_cache/
+dataset/
 test/
 
 # Pytorch weights and cache

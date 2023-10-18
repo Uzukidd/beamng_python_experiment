@@ -10,16 +10,9 @@ DATA_CONFIG:
     PREVIEW_CHANNEL: ["detector"]
     DATA_PROCESSOR:
         detector:
-          - NAME: sample_cache
-            FILENAME: ".\\dataset\\"
-            SAMPLE_FREQUENCY: 250
-
-
           - NAME: mask_points_by_range
             POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
 
-          - NAME: raw_data_remain
-          
           - NAME: transform_points_to_voxels
             VOXEL_SIZE: [0.16, 0.16, 4]
             MAX_POINTS_PER_VOXEL: 32
