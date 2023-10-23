@@ -24,7 +24,7 @@ class carla_client:
         self.carla_client.set_timeout(timeout)
         
     def start_client(self) -> None:
-        self.carla_world = self.carla_client.load_world('Town01')
+        self.carla_world = self.carla_client.load_world('Town03')
         
     def debug_luanch_test(self) -> None:
         original_settings = self.carla_world.get_settings()
