@@ -1,5 +1,4 @@
 # beamng_python_experiment
 
-<video width="640" height="360" controls>
-  <source src="asset/demo.mp4" type="video/mp4">
-</video>
+https://github.com/Uzukidd/beamng_python_experiment/assets/53105227/c22ee48c-eca6-4ddb-a4d7-1afd7d38181a
+
