@@ -1,0 +1,39 @@
+CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
+
+DATA_CONFIG: 
+    POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
+    POINT_FEATURE_ENCODING: {
+      encoding_type: absolute_coordinates_encoding,
+      used_feature_list: ['x', 'y', 'z', 'intensity'],
+      src_feature_list: ['x', 'y', 'z', 'intensity'],
+    }
+    PREVIEW_CHANNEL: ["detector"]
+    DATA_PROCESSOR:
+        detector:
+          - NAME: mask_points_by_range
+            POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
+          
+          - NAME: transform_points_to_voxels
+            VOXEL_SIZE: [0.16, 0.16, 4]
+            MAX_POINTS_PER_VOXEL: 32
+            MAX_NUMBER_OF_VOXELS: {
+              'train': 16000,
+              'test': 40000
+            }
+
+
+MODEL:
+    NAME: PointPillar
+    POST_PROCESSING:
+        RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
+        SCORE_THRESH: 0.1
+        OUTPUT_RAW_SCORE: False
+
+        EVAL_METRIC: kitti
+
+        NMS_CONFIG:
+            MULTI_CLASSES_NMS: False
+            NMS_TYPE: nms_gpu
+            NMS_THRESH: 0.01
+            NMS_PRE_MAXSIZE: 4096
+            NMS_POST_MAXSIZE: 500
