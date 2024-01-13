@@ -191,7 +191,7 @@ class lidar_carla:
     def _pcs_callback(self, point_cloud) -> None:
         data = np.copy(np.frombuffer(point_cloud.raw_data, dtype=np.dtype('f4')))
         data = data.reshape((-1, 4))
-        data[:, 1] = -data[:, 1] 
+        data[:, 1] = -data[:, 1]
         # data[:, 3] = 0
         # self.pcs_frames.put(data)
         self.pcs_frames = data
