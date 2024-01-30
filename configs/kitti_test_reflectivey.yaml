@@ -7,21 +7,15 @@ DATA_CONFIG:
       used_feature_list: ['x', 'y', 'z', 'intensity'],
       src_feature_list: ['x', 'y', 'z', 'intensity'],
     }
-    PREVIEW_CHANNEL: ["detector"]
+    PREVIEW_CHANNEL: ["zero", "mapped"]
     DATA_PROCESSOR:
-        detector:
-          # - NAME: sample_cache
-          #   FILENAME: ".\\dataset\\"
-          #   SAMPLE_FREQUENCY: 200
-
+        zero:
           - NAME: mask_points_by_range
             POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
-          
-          - NAME: reflective_mapping
-            ALPHA: -1.0
-            BIAS: 1.0
 
-          # - NAME: raw_data_remain
+          - NAME: reflective_mapping
+            ALPHA: 0.0
+            BIAS: 0.0
           
           - NAME: transform_points_to_voxels
             VOXEL_SIZE: [0.16, 0.16, 4]
@@ -29,31 +23,24 @@ DATA_CONFIG:
             MAX_NUMBER_OF_VOXELS: {
               'train': 16000,
               'test': 40000
-            }
+            } 
+          
+        mapped:
+          - NAME: mask_points_by_range
+            POINT_CLOUD_RANGE: [0, -39.68, -3, 69.12, 39.68, 1]
+          
+          - NAME: reflective_mapping
+            ALPHA: -1.0
+            BIAS: 1.0
+          
+          - NAME: transform_points_to_voxels
+            VOXEL_SIZE: [0.16, 0.16, 4]
+            MAX_POINTS_PER_VOXEL: 32
+            MAX_NUMBER_OF_VOXELS: {
+              'train': 16000,
+              'test': 40000
+            } 
 
-        # cross_sensor:
-        #   - NAME: utils.mods.pre_pocessing.robo3d.cross_sensor_process
-        #     EXT_MODULE: True
-        #     NUM_BEAM_TO_DROP: 32
-
-        # simulate_fog:
-        #   - NAME: utils.mods.pre_pocessing.robo3d.simulate_fog
-        #     EXT_MODULE: True
-        #     INTENSITY: soft
-        #   # intensity:[soft, hard]
-        #     GAIN: False
-        #     INTE_NAME: integral_lookup_tables_seg_light_0.008beta
-        #     NOISE: 10
-        #     BETA: 0.2
-        #     NOISE_VARIANT: v1
-          # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]  
-          # beta = [0.008, 0.05, 0.2]
-
-        # motion_blur:
-        #   - NAME: utils.mods.pre_pocessing.robo3d.motion_blur
-        #     EXT_MODULE: True
-        #     TRANS_STD: [0.10, 0.10, 0.10]
-          # light:[0.04, 0.04, 0.04]; moderate:[0.08, 0.08, 0.08]; heavy:[0.10, 0.10, 0.10]   
 
 
 MODEL:
