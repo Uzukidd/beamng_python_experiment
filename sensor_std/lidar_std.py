@@ -212,7 +212,7 @@ class lidar_carla:
             point_cloud.raw_data, dtype=np.dtype('f4')))
         data = data.reshape((-1, 4))
         data[:, 1] = -data[:, 1]
-        # data[:, 3] = 0
+        data[:, 3] = 0
         # self.pcs_frames.put(data)
         self.pcs_frames = data
 

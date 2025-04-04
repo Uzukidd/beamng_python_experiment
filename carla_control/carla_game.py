@@ -25,9 +25,10 @@ class carla_client:
         self.carla_client.set_timeout(timeout)
 
     def start_client(self) -> None:
-        self.carla_world = self.carla_client.load_world('Town03')
+        # self.carla_world = self.carla_client.load_world('Town10HD_Opt')
+        self.carla_world = self.carla_client.get_world()
 
-    def debug_luanch_test(self) -> None:
+    def debug_luanch_test_1(self,) -> None:
         original_settings = self.carla_world.get_settings()
         settings = self.carla_world.get_settings()
         traffic_manager = self.carla_client.get_trafficmanager(8000)
@@ -43,18 +44,40 @@ class carla_client:
         blueprint_library = self.carla_world.get_blueprint_library()
         vehicle_bp = blueprint_library.filter("model3")[0]
         vehicle_transform = self.carla_world.get_map().get_spawn_points()
-        vehicle_transform_z = np.array(
-            [tr.location.z for tr in vehicle_transform])
-        hignest_point_idx = np.argmax(vehicle_transform_z)
-        # vehicle_transform = vehicle_transform[]
-        # pos_idx = np.random.randint(0, vehicle_transform.__len__())
+        # vehicle_transform_z = np.array(
+        #     [tr.location.z for tr in vehicle_transform])
+        # hignest_point_idx = np.argmax(vehicle_transform_z)
+        vehicle_transform = vehicle_transform
+        pos_idx = np.random.randint(0, vehicle_transform.__len__())
         print(
-            f"The ego vehicle has been spawned at position \t{hignest_point_idx}/\t{vehicle_transform.__len__()}")
-        vehicle_transform = vehicle_transform[hignest_point_idx]
+            f"The ego vehicle has been spawned at position \t{pos_idx}/\t{vehicle_transform.__len__()}")
+        vehicle_transform = vehicle_transform[pos_idx]
 
         self.vehicle = self.carla_world.spawn_actor(
             vehicle_bp, vehicle_transform)
         self.vehicle.set_autopilot(True)
+
+        self.lidar_t = lidar_carla(
+            self.carla_world, self.vehicle, pcs_cache=False, need_gt=True)
+        self.lidar_t.init_lidar()
+
+    def debug_luanch_test_2(self, hero_id) -> None:
+        settings = self.carla_world.get_settings()
+        # traffic_manager = self.carla_client.get_trafficmanager(8000)
+        # traffic_manager.set_synchronous_mode(True)
+
+        delta = 0.05
+
+        settings.fixed_delta_seconds = delta
+        settings.synchronous_mode = False
+        settings.no_rendering_mode = not self.rendering
+        self.carla_world.apply_settings(settings)
+
+        self.vehicle = self.carla_world.get_actor(hero_id)
+        if self.vehicle is None:
+            # traffic_manager.set_synchronous_mode(False)
+            import sys
+            sys.exit(0)
 
         self.lidar_t = lidar_carla(
             self.carla_world, self.vehicle, pcs_cache=False, need_gt=True)

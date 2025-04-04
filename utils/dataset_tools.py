@@ -90,6 +90,8 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         self.init_data_processor()
 
+        self.depth_downsample_factor = None
+
     def init_data_processor(self):
         if self.dataset_cfg.DATA_PROCESSOR is not None:
             for channel_name, channel in self.dataset_cfg.DATA_PROCESSOR.items():
@@ -112,6 +114,13 @@ class point_cloud_dataset_base(torch_data.Dataset):
                             process_method(config=process))
                     else:
                         raise NotImplementedError
+                    
+        if self.dataset_cfg.POINT_FEATURE_ENCODING is not None:
+            from pcdet.datasets.processor.point_feature_encoder import PointFeatureEncoder
+            self.point_feature_encoder = PointFeatureEncoder(
+                self.dataset_cfg.POINT_FEATURE_ENCODING,
+                point_cloud_range=self.point_cloud_range
+            )
 
     def sample_cache(self, data_dict=None, config=None):
         if data_dict is None:

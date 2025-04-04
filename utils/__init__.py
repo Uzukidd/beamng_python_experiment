@@ -4,9 +4,13 @@ import logging
 
 from .dataset_tools import carla_point_cloud_dataset, beamng_point_cloud_dataset, file_point_cloud_dataset
 from .config_init import cfg, cfg_from_yaml_file
-from .visualize_utils import draw_scenes_maya, mayavi_animate_visualizer
+# from .visualize_utils import draw_scenes_maya, mayavi_animate_visualizer
 from .open3d_vis_utils import draw_scenes
-from .cpp_ext import iou3d_nms_cuda
+try :
+    from .cpp_ext import iou3d_nms_cuda
+except :
+    from pcdet.ops.iou3d_nms import iou3d_nms_cuda
+    print("try to use pcdet.ops.iou3d_nms.iou3d_nms_cuda")
 # from .mods import post_processing
 
 def nms_gpu(boxes, scores, thresh, pre_maxsize=None, **kwargs):
