@@ -125,7 +125,7 @@ class lidar_carla:
                 lidar_bp.set_attribute('dropoff_intensity_limit', '1.0')
                 lidar_bp.set_attribute('dropoff_zero_intensity', '0.0')
             else:
-                lidar_bp.set_attribute('noise_stddev', '0.2')
+                lidar_bp.set_attribute('noise_stddev', '0.05')
 
         lidar_bp.set_attribute('upper_fov', arg["upper_fov"])
         lidar_bp.set_attribute('lower_fov', str(arg["lower_fov"]))
