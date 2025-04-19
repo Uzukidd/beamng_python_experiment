@@ -390,7 +390,6 @@ class point_cloud_dataset_base(torch_data.Dataset):
         data_dict = {}
 
         import time
-
         if points is not None:
             for channel_name in self.data_processor_queue:
                 before_time = time.perf_counter()

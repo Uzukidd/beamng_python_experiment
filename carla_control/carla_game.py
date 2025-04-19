@@ -61,7 +61,7 @@ class carla_client:
             self.carla_world, self.vehicle, pcs_cache=False, need_gt=True)
         self.lidar_t.init_lidar()
 
-    def debug_luanch_test_2(self, hero_id) -> None:
+    def debug_luanch_test_2(self, rolename) -> None:
         settings = self.carla_world.get_settings()
         # traffic_manager = self.carla_client.get_trafficmanager(8000)
         # traffic_manager.set_synchronous_mode(True)
@@ -73,7 +73,15 @@ class carla_client:
         settings.no_rendering_mode = not self.rendering
         self.carla_world.apply_settings(settings)
 
-        self.vehicle = self.carla_world.get_actor(hero_id)
+        self.vehicle = None
+        while self.vehicle is None:
+            possible_vehicles = self.carla_world.get_actors().filter('vehicle.*')
+            for vehicle in possible_vehicles:
+                if vehicle.attributes['role_name'] == rolename:
+                    print("Ego vehicle found")
+                    self.vehicle = vehicle
+                    break
+        
         if self.vehicle is None:
             # traffic_manager.set_synchronous_mode(False)
             import sys
