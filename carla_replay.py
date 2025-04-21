@@ -42,17 +42,27 @@ def parse_arguments():
         "-f",
         "--recorder-filename",
         metavar="F",
-        default="D:\\project\\scenario_runner\\manual_records\\FollowLeadingVehicleWithObstacle_1.log",
+        default="D:\\project\\scenario_runner\\manual_records\\FollowLeadingVehicle_1.log",
         help="recorder filename (test1.log)",
     )
     argparser.add_argument(
         "-c",
         "--config-filename",
         default=".\\configs\\carla_predict_eval.yaml",
-        help="recorder filename (test1.log)",
+        help="config filename (*.yaml)",
+    )
+    argparser.add_argument(
+        "-v",
+        "--preview",
+        action="store_true",
+        help="open an open3d windows to preview current frame",
     )
     args = argparser.parse_args()
     return args
+
+
+class replay_finished(Exception):
+    pass
 
 
 def carla_ticking(client, idx, data_dict):
@@ -65,11 +75,11 @@ def carla_ticking(client, idx, data_dict):
 
 
 def model_forwarding(model, idx, data_dict):
-    final_boxes, final_scores, final_labels = None, None, None
+    pred_dicts, final_boxes, final_scores, final_labels = None, None, None, None
     before_time = time.perf_counter()
 
     if data_dict["points"] is not None:
-        pred_dicts, _ = model.forward(data_dict)
+        pred_dicts, ret_dict = model.forward(data_dict)
 
         if isinstance(pred_dicts, list):
             cls_preds = pred_dicts[0]["pred_scores"]
@@ -80,7 +90,7 @@ def model_forwarding(model, idx, data_dict):
             box_preds = pred_dicts["pred_boxes"]
             label_preds = pred_dicts["pred_labels"]
             selected, selected_scores = class_agnostic_nms(
-                box_scores=cls_preds, box_preds=box_preds, score_thresh=0.4
+                box_scores=cls_preds, box_preds=box_preds, score_thresh=0.1
             )
             cls_preds = cls_preds[selected]
             label_preds = label_preds[selected]
@@ -90,7 +100,7 @@ def model_forwarding(model, idx, data_dict):
         final_labels = label_preds
         final_boxes = box_preds
     after_time = time.perf_counter()
-    return after_time - before_time, data_dict, final_boxes, final_scores, final_labels
+    return after_time - before_time, pred_dicts, final_boxes, final_scores, final_labels
 
 
 def scene_rendering(
@@ -119,6 +129,10 @@ def scene_rendering(
     vis.clear_geometries()
     after_time = time.perf_counter()
     return after_time - before_time, None
+
+
+def evaluation_result(gt_annos, det_annos):
+    pass
 
 
 def main(args):
@@ -164,12 +178,14 @@ def main(args):
         print(e)
         logger.error("Failed to load model")
 
-    visualizers = {}
-    for channel_name in pcs_dataset.preview_channel:
-        visualizers[channel_name] = o3d.visualization.Visualizer()
-        visualizers[channel_name].create_window(
-            window_name=channel_name, width=1920, height=1080
-        )
+    visualizers = None
+    if args.preview:
+        visualizers = {}
+        for channel_name in pcs_dataset.preview_channel:
+            visualizers[channel_name] = o3d.visualization.Visualizer()
+            visualizers[channel_name].create_window(
+                window_name=channel_name, width=1920, height=1080
+            )
         # view_control = visualizers[channel_name].get_view_control()
         # view_params = {
         #     "boundingbox_max": np.array([69.118263244628906, 39.679920196533203, 16.415634155273438]),
@@ -186,50 +202,70 @@ def main(args):
         # view_control.set_zoom(view_params["zoom"])
         # view_control.change_field_of_view(view_params["field_of_view"])
         # view_control.set_constant_z_far(280.0)
-
+    gt_annos = {channel_name: [] for channel_name in pcs_dataset.preview_channel}
+    det_annos = {channel_name: [] for channel_name in pcs_dataset.preview_channel}
     try:
         with torch.no_grad():
             for idx, data_series in enumerate(pcs_dataset):
+                if client.vehicle.actor_state == carla.ActorState.Invalid:
+                    raise replay_finished()
 
                 ticking_time, _ = carla_ticking(client, idx, None)
 
                 for channel_name, channel in data_series.items():
                     data_dict = data_series[channel_name]
-                    vis = visualizers[channel_name]
+
+                    vis = None
+                    if visualizers:
+                        vis = visualizers[channel_name]
+
+                    ind_gt_annos = gt_annos[channel_name]
+                    ind_det_annos = det_annos[channel_name]
 
                     pre_time = data_dict["pre_time"]
-                    forward_time = 0.0
+                    forward_time, render_time = 0.0, 0.0
                     final_boxes, final_scores, final_labels = None, None, None
                     gt_boxes = data_dict.get("gt_boxes", None)
 
                     if data_dict["points"] is not None:
-
-                        data_dict = pcs_dataset.collate_batch([data_dict])
-                        load_data_to_gpu(data_dict)
+                        batch_dict = pcs_dataset.collate_batch([data_dict])
+                        load_data_to_gpu(batch_dict)
 
                         if model is not None:
                             (
                                 forward_time,
-                                data_dict,
+                                pred_dicts,
                                 final_boxes,
                                 final_scores,
                                 final_labels,
-                            ) = model_forwarding(model, idx, data_dict)
+                            ) = model_forwarding(model, idx, batch_dict)
+                            annos = pcs_dataset.generate_prediction_dicts(
+                                batch_dict,
+                                pred_dicts,
+                                cfg.CLASS_NAMES,
+                                output_path=None,
+                            )
+
+                            ind_gt_annos += {
+                                "frame_id": data_dict["frame_id"],
+                                "gt_boxes": data_dict.get("gt_boxes", None),
+                            }
+                            ind_det_annos += annos
                         else:
                             forward_time = 0.0
                             final_boxes = None
                             final_scores = None
                             final_labels = None
-
-                        render_time, _ = scene_rendering(
-                            idx,
-                            data_dict["points"],
-                            vis,
-                            final_boxes,
-                            final_scores,
-                            final_labels,
-                            gt_boxes,
-                        )
+                        if vis:
+                            render_time, _ = scene_rendering(
+                                idx,
+                                batch_dict["points"],
+                                vis,
+                                final_boxes,
+                                final_scores,
+                                final_labels,
+                                gt_boxes,
+                            )
 
                         # render_time = time.perf_counter()
 
@@ -261,11 +297,16 @@ def main(args):
                         #     f"Target amount: {len(final_boxes if (final_boxes is not None) else [])}"
                         # )
                         # logger.info(f"current uuid:{object_tracker.get_last_uuid()}")
+    except replay_finished:
+        print("replay finished!")
     except KeyboardInterrupt:
-        pass
+        print("replay interrupted!")
+    except Exception as e:
+        print(e)
     finally:
-        for channel_name in pcs_dataset.preview_channel:
-            visualizers[channel_name].destroy_window()
+        if visualizers:
+            for channel_name in pcs_dataset.preview_channel:
+                visualizers[channel_name].destroy_window()
         client.close_client()
         print("CarLA client closed!")
 

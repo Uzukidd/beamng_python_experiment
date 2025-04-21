@@ -86,7 +86,7 @@ class lidar_carla:
         "range": "120.0",
         "points_per_second": "3300000",
         "semantic": False,
-        "no_noise": True,
+        "no_noise": False,
         "delta": 0.05,
         # "rotation_frequency":"20"
     }, logger=None, need_gt=False, pcs_cache=False, pcs_frames_cache=1) -> None:
@@ -125,7 +125,7 @@ class lidar_carla:
                 lidar_bp.set_attribute('dropoff_intensity_limit', '1.0')
                 lidar_bp.set_attribute('dropoff_zero_intensity', '0.0')
             else:
-                lidar_bp.set_attribute('noise_stddev', '0.05')
+                lidar_bp.set_attribute('noise_stddev', '0.02')
 
         lidar_bp.set_attribute('upper_fov', arg["upper_fov"])
         lidar_bp.set_attribute('lower_fov', str(arg["lower_fov"]))
@@ -164,7 +164,6 @@ class lidar_carla:
                     self.lidar.get_transform().location)
 
                 if dist < 120:
-
                     # coordinate transformation bbox -> world -> lidar(ego vehicle)
                     bounding_box_loc = npc.bounding_box.location + npc.get_transform().location - \
                         self.lidar.get_transform().location
@@ -212,7 +211,7 @@ class lidar_carla:
             point_cloud.raw_data, dtype=np.dtype('f4')))
         data = data.reshape((-1, 4))
         data[:, 1] = -data[:, 1]
-        data[:, 3] = 0
+        # data[:, 3] = 0
         # self.pcs_frames.put(data)
         self.pcs_frames = data
 

@@ -16,17 +16,27 @@ except:
     pass
 
 
-class VoxelGeneratorWrapper():
-    def __init__(self, vsize_xyz, coors_range_xyz, num_point_features, max_num_points_per_voxel, max_num_voxels):
+class VoxelGeneratorWrapper:
+    def __init__(
+        self,
+        vsize_xyz,
+        coors_range_xyz,
+        num_point_features,
+        max_num_points_per_voxel,
+        max_num_voxels,
+    ):
         try:
             from spconv.utils import VoxelGeneratorV2 as VoxelGenerator
+
             self.spconv_ver = 1
         except:
             try:
                 from spconv.utils import VoxelGenerator
+
                 self.spconv_ver = 1
             except:
                 from spconv.utils import Point2VoxelCPU3d as VoxelGenerator
+
                 self.spconv_ver = 2
 
         if self.spconv_ver == 1:
@@ -34,7 +44,7 @@ class VoxelGeneratorWrapper():
                 voxel_size=vsize_xyz,
                 point_cloud_range=coors_range_xyz,
                 max_num_points=max_num_points_per_voxel,
-                max_voxels=max_num_voxels
+                max_voxels=max_num_voxels,
             )
         else:
             self._voxel_generator = VoxelGenerator(
@@ -42,21 +52,25 @@ class VoxelGeneratorWrapper():
                 coors_range_xyz=coors_range_xyz,
                 num_point_features=num_point_features,
                 max_num_points_per_voxel=max_num_points_per_voxel,
-                max_num_voxels=max_num_voxels
+                max_num_voxels=max_num_voxels,
             )
 
     def generate(self, points):
         if self.spconv_ver == 1:
             voxel_output = self._voxel_generator.generate(points)
             if isinstance(voxel_output, dict):
-                voxels, coordinates, num_points = \
-                    voxel_output['voxels'], voxel_output['coordinates'], voxel_output['num_points_per_voxel']
+                voxels, coordinates, num_points = (
+                    voxel_output["voxels"],
+                    voxel_output["coordinates"],
+                    voxel_output["num_points_per_voxel"],
+                )
             else:
                 voxels, coordinates, num_points = voxel_output
         else:
-            assert tv is not None, f"Unexpected error, library: 'cumm' wasn't imported properly."
-            voxel_output = self._voxel_generator.point_to_voxel(
-                tv.from_numpy(points))
+            assert (
+                tv is not None
+            ), f"Unexpected error, library: 'cumm' wasn't imported properly."
+            voxel_output = self._voxel_generator.point_to_voxel(tv.from_numpy(points))
             tv_voxels, tv_coordinates, tv_num_points = voxel_output
             # make copy with numpy(), since numpy_view() will disappear as soon as the generator is deleted
             voxels = tv_voxels.numpy()
@@ -66,19 +80,29 @@ class VoxelGeneratorWrapper():
 
 
 class point_cloud_dataset_base(torch_data.Dataset):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+    def __init__(
+        self,
+        dataset_cfg,
+        class_names,
+        training=False,
+        root_path=None,
+        logger=None,
+        lidar=None,
+    ) -> None:
         super().__init__()
         self.lidar = lidar
         self.idx = 0
         self.class_names = class_names
         self.dataset_cfg = dataset_cfg
         self.point_cloud_range = np.array(
-            self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
+            self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32
+        )
         self.training = training
         self.num_point_features = len(
-            self.dataset_cfg.POINT_FEATURE_ENCODING.used_feature_list)
+            self.dataset_cfg.POINT_FEATURE_ENCODING.used_feature_list
+        )
         self.root_path = root_path
-        self.mode = 'train' if training else 'test'
+        self.mode = "train" if training else "test"
 
         self.preview_channel = self.dataset_cfg.PREVIEW_CHANNEL
         self.data_processor_queue = {}
@@ -102,24 +126,27 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
                     module_call = self
                     method_name = process["NAME"]
-                    if process.get('EXT_MODULE', False):
-                        module_name, method_name = process["NAME"].rsplit(
-                            '.', 1)
+                    if process.get("EXT_MODULE", False):
+                        module_name, method_name = process["NAME"].rsplit(".", 1)
                         module_call = importlib.import_module(module_name)
 
                     process_method = getattr(module_call, method_name)
 
                     if process_method is not None and callable(process_method):
                         self.data_processor_queue[channel_name].append(
-                            process_method(config=process))
+                            process_method(config=process)
+                        )
                     else:
                         raise NotImplementedError
-                    
+
         if self.dataset_cfg.POINT_FEATURE_ENCODING is not None:
-            from pcdet.datasets.processor.point_feature_encoder import PointFeatureEncoder
+            from pcdet.datasets.processor.point_feature_encoder import (
+                PointFeatureEncoder,
+            )
+
             self.point_feature_encoder = PointFeatureEncoder(
                 self.dataset_cfg.POINT_FEATURE_ENCODING,
-                point_cloud_range=self.point_cloud_range
+                point_cloud_range=self.point_cloud_range,
             )
 
     def sample_cache(self, data_dict=None, config=None):
@@ -133,9 +160,7 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         if self.idx % frequency == 0:
             filename = f"{int(self.idx / frequency):05d}"
-            if points is not None \
-                    and gt is not None \
-                    and file_path is not None:
+            if points is not None and gt is not None and file_path is not None:
                 np.save(os.path.join(file_path, "points", filename), points)
                 np.save(os.path.join(file_path, "gt", filename), gt)
 
@@ -152,7 +177,8 @@ class point_cloud_dataset_base(torch_data.Dataset):
     def transform_points_to_voxels(self, data_dict=None, config=None):
         if data_dict is None:
             grid_size = (
-                self.point_cloud_range[3:6] - self.point_cloud_range[0:3]) / np.array(config.VOXEL_SIZE)
+                self.point_cloud_range[3:6] - self.point_cloud_range[0:3]
+            ) / np.array(config.VOXEL_SIZE)
             self.grid_size = np.round(grid_size).astype(np.int64)
             self.voxel_size = config.VOXEL_SIZE
             # just bind the config, we will create the VoxelGeneratorWrapper later,
@@ -168,48 +194,50 @@ class point_cloud_dataset_base(torch_data.Dataset):
                 max_num_voxels=config.MAX_NUMBER_OF_VOXELS[self.mode],
             )
 
-        points = data_dict['points']
+        points = data_dict["points"]
         voxel_output = self.voxel_generator.generate(points)
         voxels, coordinates, num_points = voxel_output
 
-        if not data_dict['use_lead_xyz']:
+        if not data_dict["use_lead_xyz"]:
             voxels = voxels[..., 3:]  # remove xyz in voxels(N, 3)
 
-        if config.get('DOUBLE_FLIP', False):
-            voxels_list, voxel_coords_list, voxel_num_points_list = [
-                voxels], [coordinates], [num_points]
-            points_yflip, points_xflip, points_xyflip = self.double_flip(
-                points)
+        if config.get("DOUBLE_FLIP", False):
+            voxels_list, voxel_coords_list, voxel_num_points_list = (
+                [voxels],
+                [coordinates],
+                [num_points],
+            )
+            points_yflip, points_xflip, points_xyflip = self.double_flip(points)
             points_list = [points_yflip, points_xflip, points_xyflip]
-            keys = ['yflip', 'xflip', 'xyflip']
+            keys = ["yflip", "xflip", "xyflip"]
             for i, key in enumerate(keys):
                 voxel_output = self.voxel_generator.generate(points_list[i])
                 voxels, coordinates, num_points = voxel_output
 
-                if not data_dict['use_lead_xyz']:
+                if not data_dict["use_lead_xyz"]:
                     voxels = voxels[..., 3:]
                 voxels_list.append(voxels)
                 voxel_coords_list.append(coordinates)
                 voxel_num_points_list.append(num_points)
 
-            data_dict['voxels'] = voxels_list
-            data_dict['voxel_coords'] = voxel_coords_list
-            data_dict['voxel_num_points'] = voxel_num_points_list
+            data_dict["voxels"] = voxels_list
+            data_dict["voxel_coords"] = voxel_coords_list
+            data_dict["voxel_num_points"] = voxel_num_points_list
         else:
-            data_dict['voxels'] = voxels
-            data_dict['voxel_coords'] = coordinates
-            data_dict['voxel_num_points'] = num_points
+            data_dict["voxels"] = voxels
+            data_dict["voxel_coords"] = coordinates
+            data_dict["voxel_num_points"] = num_points
         return data_dict
 
     def reflective_mapping(self, data_dict=None, config=None):
         """
-            new reflective = old reflective * alpha + bias
-            eg. kitti reflective = -1.0 * carla reflective + 1.0
+        new reflective = old reflective * alpha + bias
+        eg. kitti reflective = -1.0 * carla reflective + 1.0
         """
         if data_dict is None:
             return partial(self.reflective_mapping, config=config)
         points = data_dict["points"]
-        intensity = data_dict['intensity']
+        intensity = data_dict["intensity"]
         alpha = config["ALPHA"]
         bias = config["BIAS"]
 
@@ -226,19 +254,80 @@ class point_cloud_dataset_base(torch_data.Dataset):
         gt = data_dict.get("gt_boxes", None)
         limit_range = config["POINT_CLOUD_RANGE"]
 
-        mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
-            & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4])
+        mask = (
+            (points[:, 0] >= limit_range[0])
+            & (points[:, 0] <= limit_range[3])
+            & (points[:, 1] >= limit_range[1])
+            & (points[:, 1] <= limit_range[4])
+        )
 
-        data_dict['points'] = data_dict['points'][mask]
-        data_dict['intensity'] = data_dict['intensity'][mask]
-        data_dict['use_lead_xyz'] = True
+        data_dict["points"] = data_dict["points"][mask]
+        data_dict["intensity"] = data_dict["intensity"][mask]
+        data_dict["use_lead_xyz"] = True
 
         if gt is not None:
-            mask = (gt[:, 0] >= limit_range[0]) & (gt[:, 0] <= limit_range[3]) \
-                & (gt[:, 1] >= limit_range[1]) & (gt[:, 1] <= limit_range[4])
+            mask = (
+                (gt[:, 0] >= limit_range[0])
+                & (gt[:, 0] <= limit_range[3])
+                & (gt[:, 1] >= limit_range[1])
+                & (gt[:, 1] <= limit_range[4])
+            )
             data_dict["gt_boxes"] = data_dict["gt_boxes"][mask]
 
         return data_dict
+
+    def generate_prediction_dicts(
+        self, batch_dict, pred_dicts, class_names, output_path=None
+    ):
+        """
+        Args:
+            batch_dict:
+                frame_id:
+            pred_dicts: list of pred_dicts
+                pred_boxes: (N, 7 or 9), Tensor
+                pred_scores: (N), Tensor
+                pred_labels: (N), Tensor
+            class_names:
+            output_path:
+
+        Returns:
+
+        """
+
+        def get_template_prediction(num_samples):
+            box_dim = 9 if self.dataset_cfg.get("TRAIN_WITH_SPEED", False) else 7
+            ret_dict = {
+                "name": np.zeros(num_samples),
+                "score": np.zeros(num_samples),
+                "boxes_lidar": np.zeros([num_samples, box_dim]),
+                "pred_labels": np.zeros(num_samples),
+            }
+            return ret_dict
+
+        def generate_single_sample_dict(box_dict):
+            pred_scores = box_dict["pred_scores"].cpu().numpy()
+            pred_boxes = box_dict["pred_boxes"].cpu().numpy()
+            pred_labels = box_dict["pred_labels"].cpu().numpy()
+            pred_dict = get_template_prediction(pred_scores.shape[0])
+            if pred_scores.shape[0] == 0:
+                return pred_dict
+
+            pred_dict["name"] = np.array(class_names)[pred_labels - 1]
+            pred_dict["score"] = pred_scores
+            pred_dict["boxes_lidar"] = pred_boxes
+            pred_dict["pred_labels"] = pred_labels
+
+            return pred_dict
+
+        annos = []
+        for index, box_dict in enumerate(pred_dicts):
+            single_pred_dict = generate_single_sample_dict(box_dict)
+            single_pred_dict["frame_id"] = batch_dict["frame_id"][index]
+            if "metadata" in batch_dict:
+                single_pred_dict["metadata"] = batch_dict["metadata"][index]
+            annos.append(single_pred_dict)
+
+        return annos
 
     @staticmethod
     def collate_batch(batch_list, _unused=False):
@@ -252,52 +341,58 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         for key, val in data_dict.items():
             try:
-                if key in ['voxels', 'voxel_num_points']:
+                if key in ["voxels", "voxel_num_points"]:
                     if isinstance(val[0], list):
                         batch_size_ratio = len(val[0])
                         val = [i for item in val for i in item]
                     ret[key] = np.concatenate(val, axis=0)
-                elif key in ['raw_points', 'points', 'voxel_coords']:
+                elif key in ["raw_points", "points", "voxel_coords"]:
                     coors = []
                     if isinstance(val[0], list):
                         val = [i for item in val for i in item]
                     for i, coor in enumerate(val):
                         coor_pad = np.pad(
-                            coor, ((0, 0), (1, 0)), mode='constant', constant_values=i)
+                            coor, ((0, 0), (1, 0)), mode="constant", constant_values=i
+                        )
                         coors.append(coor_pad)
                     ret[key] = np.concatenate(coors, axis=0)
-                elif key in ['gt_boxes']:
+                elif key in ["gt_boxes"]:
                     max_gt = max([len(x) for x in val])
                     batch_gt_boxes3d = np.zeros(
-                        (batch_size, max_gt, val[0].shape[-1]), dtype=np.float32)
+                        (batch_size, max_gt, val[0].shape[-1]), dtype=np.float32
+                    )
                     for k in range(batch_size):
-                        batch_gt_boxes3d[k, :val[k].__len__(), :] = val[k]
+                        batch_gt_boxes3d[k, : val[k].__len__(), :] = val[k]
                     ret[key] = batch_gt_boxes3d
 
-                elif key in ['roi_boxes']:
+                elif key in ["roi_boxes"]:
                     max_gt = max([x.shape[1] for x in val])
                     batch_gt_boxes3d = np.zeros(
-                        (batch_size, val[0].shape[0], max_gt, val[0].shape[-1]), dtype=np.float32)
+                        (batch_size, val[0].shape[0], max_gt, val[0].shape[-1]),
+                        dtype=np.float32,
+                    )
                     for k in range(batch_size):
-                        batch_gt_boxes3d[k, :, :val[k].shape[1], :] = val[k]
+                        batch_gt_boxes3d[k, :, : val[k].shape[1], :] = val[k]
                     ret[key] = batch_gt_boxes3d
 
-                elif key in ['roi_scores', 'roi_labels']:
+                elif key in ["roi_scores", "roi_labels"]:
                     max_gt = max([x.shape[1] for x in val])
                     batch_gt_boxes3d = np.zeros(
-                        (batch_size, val[0].shape[0], max_gt), dtype=np.float32)
+                        (batch_size, val[0].shape[0], max_gt), dtype=np.float32
+                    )
                     for k in range(batch_size):
-                        batch_gt_boxes3d[k, :, :val[k].shape[1]] = val[k]
+                        batch_gt_boxes3d[k, :, : val[k].shape[1]] = val[k]
                     ret[key] = batch_gt_boxes3d
 
-                elif key in ['gt_boxes2d']:
+                elif key in ["gt_boxes2d"]:
                     max_boxes = 0
                     max_boxes = max([len(x) for x in val])
                     batch_boxes2d = np.zeros(
-                        (batch_size, max_boxes, val[0].shape[-1]), dtype=np.float32)
+                        (batch_size, max_boxes, val[0].shape[-1]), dtype=np.float32
+                    )
                     for k in range(batch_size):
                         if val[k].size > 0:
-                            batch_boxes2d[k, :val[k].__len__(), :] = val[k]
+                            batch_boxes2d[k, : val[k].__len__(), :] = val[k]
                     ret[key] = batch_boxes2d
                 elif key in ["images", "depth_maps"]:
                     raise NotImplementedError
@@ -312,9 +407,11 @@ class point_cloud_dataset_base(torch_data.Dataset):
                     images = []
                     for image in val:
                         pad_h = common_utils.get_pad_params(
-                            desired_size=max_h, cur_size=image.shape[0])
+                            desired_size=max_h, cur_size=image.shape[0]
+                        )
                         pad_w = common_utils.get_pad_params(
-                            desired_size=max_w, cur_size=image.shape[1])
+                            desired_size=max_w, cur_size=image.shape[1]
+                        )
                         pad_width = (pad_h, pad_w)
                         pad_value = 0
 
@@ -323,39 +420,43 @@ class point_cloud_dataset_base(torch_data.Dataset):
                         elif key == "depth_maps":
                             pad_width = (pad_h, pad_w)
 
-                        image_pad = np.pad(image,
-                                           pad_width=pad_width,
-                                           mode='constant',
-                                           constant_values=pad_value)
+                        image_pad = np.pad(
+                            image,
+                            pad_width=pad_width,
+                            mode="constant",
+                            constant_values=pad_value,
+                        )
 
                         images.append(image_pad)
                     ret[key] = np.stack(images, axis=0)
-                elif key in ['calib']:
+                elif key in ["calib"]:
                     ret[key] = val
                 elif key in ["points_2d"]:
                     max_len = max([len(_val) for _val in val])
                     pad_value = 0
                     points = []
                     for _points in val:
-                        pad_width = ((0, max_len-len(_points)), (0, 0))
-                        points_pad = np.pad(_points,
-                                            pad_width=pad_width,
-                                            mode='constant',
-                                            constant_values=pad_value)
+                        pad_width = ((0, max_len - len(_points)), (0, 0))
+                        points_pad = np.pad(
+                            _points,
+                            pad_width=pad_width,
+                            mode="constant",
+                            constant_values=pad_value,
+                        )
                         points.append(points_pad)
                     ret[key] = np.stack(points, axis=0)
                 else:
                     ret[key] = np.stack(val, axis=0)
             except:
-                print('Error in collate_batch: key=%s' % key)
+                print("Error in collate_batch: key=%s" % key)
                 raise TypeError
 
-        ret['batch_size'] = batch_size * batch_size_ratio
+        ret["batch_size"] = batch_size * batch_size_ratio
         return ret
 
     def prepare_data(self, data_dict, channel_name):
         """
-            \"points\": Tensor[N, 4] : [N, (x, y, z, r)]
+        \"points\": Tensor[N, 4] : [N, (x, y, z, r)]
         """
 
         # if data_dict.get('points', None) is not None:
@@ -375,8 +476,9 @@ class point_cloud_dataset_base(torch_data.Dataset):
             points, gt = self.lidar.get_single_frame()
 
         input_dict = {
-            'points': None,
-            'intensity': None,
+            "frame_id": self.idx,
+            "points": None,
+            "intensity": None,
         }
 
         if gt is not None:
@@ -384,12 +486,13 @@ class point_cloud_dataset_base(torch_data.Dataset):
 
         if points is not None:
             points = points.reshape(-1, 4)
-            input_dict['intensity'] = points[:, 3].copy()
+            input_dict["intensity"] = points[:, 3].copy()
             input_dict["points"] = points
 
         data_dict = {}
 
         import time
+
         if points is not None:
             for channel_name in self.data_processor_queue:
                 before_time = time.perf_counter()
@@ -399,20 +502,37 @@ class point_cloud_dataset_base(torch_data.Dataset):
                     temp_dict = copy.deepcopy(temp_dict)
 
                 data_dict[channel_name] = self.prepare_data(
-                    data_dict=temp_dict, channel_name=channel_name)
+                    data_dict=temp_dict, channel_name=channel_name
+                )
+
                 after_time = time.perf_counter()
                 data_dict[channel_name]["pre_time"] = after_time - before_time
 
-        del input_dict
+        if self.data_processor_queue.__len__() > 1:
+            del input_dict
+
         # data_dict["pre_time"] = after_time - before_time
 
         return data_dict
 
 
 class carla_point_cloud_dataset(point_cloud_dataset_base):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+    def __init__(
+        self,
+        dataset_cfg,
+        class_names,
+        training=False,
+        root_path=None,
+        logger=None,
+        lidar=None,
+    ) -> None:
         super().__init__(
-            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=lidar
+            dataset_cfg=dataset_cfg,
+            class_names=class_names,
+            training=training,
+            root_path=root_path,
+            logger=logger,
+            lidar=lidar,
         )
 
     def __getitem__(self, index):
@@ -420,9 +540,22 @@ class carla_point_cloud_dataset(point_cloud_dataset_base):
 
 
 class beamng_point_cloud_dataset(point_cloud_dataset_base):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, lidar=None) -> None:
+    def __init__(
+        self,
+        dataset_cfg,
+        class_names,
+        training=False,
+        root_path=None,
+        logger=None,
+        lidar=None,
+    ) -> None:
         super().__init__(
-            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=lidar
+            dataset_cfg=dataset_cfg,
+            class_names=class_names,
+            training=training,
+            root_path=root_path,
+            logger=logger,
+            lidar=lidar,
         )
 
     def __getitem__(self, index):
@@ -430,9 +563,16 @@ class beamng_point_cloud_dataset(point_cloud_dataset_base):
 
 
 class file_point_cloud_dataset(point_cloud_dataset_base):
-    def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None) -> None:
+    def __init__(
+        self, dataset_cfg, class_names, training=False, root_path=None, logger=None
+    ) -> None:
         super().__init__(
-            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger, lidar=None
+            dataset_cfg=dataset_cfg,
+            class_names=class_names,
+            training=training,
+            root_path=root_path,
+            logger=logger,
+            lidar=None,
         )
         self.root_path = root_path
         self.filenames = os.listdir(os.path.join(self.root_path, "points"))
@@ -442,11 +582,9 @@ class file_point_cloud_dataset(point_cloud_dataset_base):
         self.gt = []
 
         for name in self.filenames:
-            self.points.append(
-                np.load(os.path.join(self.root_path, "points", name)))
+            self.points.append(np.load(os.path.join(self.root_path, "points", name)))
             try:
-                self.gt.append(
-                    np.load(os.path.join(self.root_path, "gt", name)))
+                self.gt.append(np.load(os.path.join(self.root_path, "gt", name)))
             except:
                 self.gt.append(None)
 
