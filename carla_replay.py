@@ -42,7 +42,7 @@ def parse_arguments():
         "-f",
         "--recorder-filename",
         metavar="F",
-        default="D:\\project\\scenario_runner\\manual_records\\FollowLeadingVehicle_1.log",
+        default="D:\\project\\scenario_runner\\manual_records\\FollowLeadingVehicleWithObstacle_1.log",
         help="recorder filename (test1.log)",
     )
     argparser.add_argument(
@@ -56,6 +56,12 @@ def parse_arguments():
         "--preview",
         action="store_true",
         help="open an open3d windows to preview current frame",
+    )
+    argparser.add_argument(
+        "-e",
+        "--evaluate",
+        action="store_true",
+        help="evaluate result after finishing replay",
     )
     args = argparser.parse_args()
     return args
@@ -131,8 +137,61 @@ def scene_rendering(
     return after_time - before_time, None
 
 
-def evaluation_result(gt_annos, det_annos):
-    pass
+def evaluation_result(gt_annos, det_annos, class_names: list):
+    from pcdet.ops.iou3d_nms import iou3d_nms_utils
+    import math
+    def safe_divide(a: float, b: float) -> float:
+        return a / b if b != 0.0 else math.nan
+
+    res_dict = {}
+    res_str = ""
+    for channel_name in det_annos.keys():
+        channel_gt_annos = gt_annos[channel_name]
+        channel_det_annos = det_annos[channel_name]
+
+        channel_res = {
+            name: {
+                "3d": {
+                    "recall": 0,
+                    "totall": 0,
+                }
+            }
+            for name in class_names
+        }
+        for ind_gt_annos, ind_det_annos in zip(channel_gt_annos, channel_det_annos):
+            gt_boxes, _ = common_utils.check_numpy_to_torch(ind_gt_annos["gt_boxes"])
+            det_boxes, _ = common_utils.check_numpy_to_torch(
+                ind_det_annos["boxes_lidar"]
+            )
+            det_label, _ = common_utils.check_numpy_to_torch(
+                ind_det_annos["pred_labels"]
+            )
+
+            if gt_boxes is None:
+                continue
+            for label, class_name in enumerate(class_names):
+                label = label + 1
+                label_gt_boxes = gt_boxes[gt_boxes[:, 7] == label].cuda()
+                label_det_boxes = det_boxes[det_label == label].cuda()
+
+                # 3d bounding box metric
+                gt_iou3d = iou3d_nms_utils.boxes_iou3d_gpu(
+                    label_gt_boxes[:, :7], label_det_boxes
+                )
+                channel_res[class_name]["3d"]["recall"] += torch.any(
+                    gt_iou3d >= 0.7, dim=1
+                ).sum().item()
+                channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
+
+        res_dict[channel_name] = channel_res
+
+        res_str += f"-------{channel_name}--------\n"
+
+        for label, class_name in enumerate(class_names):
+            res_str += f"{class_name}\tmAP@0.70 NaN NaN\n"
+            res_str += f"3d\t mAP:{safe_divide(channel_res[class_name]["3d"]["recall"], channel_res[class_name]["3d"]["totall"]) * 100.0:.2f}\n"
+
+    return res_dict, res_str
 
 
 def main(args):
@@ -246,10 +305,12 @@ def main(args):
                                 output_path=None,
                             )
 
-                            ind_gt_annos += {
-                                "frame_id": data_dict["frame_id"],
-                                "gt_boxes": data_dict.get("gt_boxes", None),
-                            }
+                            ind_gt_annos += [
+                                {
+                                    "frame_id": data_dict["frame_id"],
+                                    "gt_boxes": data_dict.get("gt_boxes", None),
+                                }
+                            ]
                             ind_det_annos += annos
                         else:
                             forward_time = 0.0
@@ -302,13 +363,28 @@ def main(args):
     except KeyboardInterrupt:
         print("replay interrupted!")
     except Exception as e:
-        print(e)
+        import traceback
+
+        traceback.print_exc()
     finally:
         if visualizers:
             for channel_name in pcs_dataset.preview_channel:
                 visualizers[channel_name].destroy_window()
         client.close_client()
         print("CarLA client closed!")
+
+    if args.evaluate:
+        res_dict, res_str = evaluation_result(gt_annos, det_annos, cfg.CLASS_NAMES)
+        print(res_str)
+        import os
+        import json
+
+        result_filename = os.path.join(
+            "./evaluation_result",
+            os.path.splitext(os.path.basename(args.recorder_filename))[0] + ".json",
+        )
+        with open(result_filename, "w", encoding="utf-8") as f:
+            json.dump(res_dict, f, indent=4, ensure_ascii=False, default=str)
 
 
 if __name__ == "__main__":

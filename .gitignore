@@ -2,6 +2,7 @@
 .np_cache/
 dataset/
 test/
+evaluation_result/*
 
 # Pytorch weights and cache
 *.pt
