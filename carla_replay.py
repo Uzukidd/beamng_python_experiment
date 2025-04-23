@@ -163,7 +163,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
         channel_res = {
             name: {
                 "3d": {
-                    "confidence": 0,
+                    "confidence": [],
                     "recall": 0,
                     "totall": 0,
                 }
@@ -175,19 +175,26 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
             det_boxes, _ = common_utils.check_numpy_to_torch(
                 ind_det_annos["boxes_lidar"]
             )
-            det_label, _ = common_utils.check_numpy_to_torch(
+            det_scores, _ = common_utils.check_numpy_to_torch(ind_det_annos["score"])
+            det_labels, _ = common_utils.check_numpy_to_torch(
                 ind_det_annos["pred_labels"]
             )
 
             if gt_boxes is None:
                 continue
+
             for label, class_name in enumerate(class_names):
                 label = label + 1
                 label_gt_boxes = gt_boxes[gt_boxes[:, 7] == label].cuda()
-                label_det_boxes = det_boxes[det_label == label].cuda()
+
+                label_det_boxes = det_boxes[det_labels == label].cuda()
+                label_det_scores = det_scores[det_labels == label].cuda()
+
+                if label_gt_boxes.numel() == 0:
+                    continue
 
                 # 3d bounding box metric
-                gt_iou3d = iou3d_nms_utils.boxes_iou3d_gpu(
+                gt_iou3d: torch.Tensor = iou3d_nms_utils.boxes_iou3d_gpu(
                     label_gt_boxes[:, :7], label_det_boxes
                 )
                 channel_res[class_name]["3d"]["recall"] += (
@@ -195,13 +202,24 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 )
                 channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
 
+                if gt_iou3d.numel() == 0:
+                    continue
+                # confidence scores metric
+                correspond_det_idx = gt_iou3d[torch.any(gt_iou3d >= 0.7, dim=1), :].argmax(dim=1)
+                channel_res[class_name]["3d"]["confidence"] += label_det_scores[
+                    correspond_det_idx
+                ].tolist()
+        for label, class_name in enumerate(class_names):
+            channel_res[class_name]["3d"]["confidence"] = np.array(
+                channel_res[class_name]["3d"]["confidence"]
+            ).mean()
         res_dict[channel_name] = channel_res
 
         res_str += f"-------{channel_name}--------\n"
 
         for label, class_name in enumerate(class_names):
             res_str += f"{class_name}\tmAP@0.70 NaN NaN\n"
-            res_str += f"3d\t mAP:{safe_divide(channel_res[class_name]["3d"]["recall"], channel_res[class_name]["3d"]["totall"]) * 100.0:.2f}\n"
+            res_str += f"3d\t mAP:{safe_divide(channel_res[class_name]["3d"]["recall"], channel_res[class_name]["3d"]["totall"]) * 100.0:.2f}\tmConf:{channel_res[class_name]["3d"]["confidence"]:.2f}\n"
 
     return res_dict, res_str
 
@@ -214,7 +232,7 @@ def main(args):
 
     client.synchronize_client()
     client.replay_file(args.recorder_filename)
-    client.carla_world.tick() # skip one frame to avoid the ego vehicle did not initialize properly
+    client.carla_world.tick()  # skip one frame to avoid the ego vehicle did not initialize properly
 
     client.connect_to_vehicle(args.rolename, noisy_lidar=args.noisy_lidar)
 
@@ -385,7 +403,9 @@ def main(args):
 
         result_filename = os.path.join(
             "./evaluation_result",
-            os.path.splitext(os.path.basename(args.recorder_filename))[0] + ("_noisy" if args.noisy_lidar else "") + ".json",
+            os.path.splitext(os.path.basename(args.recorder_filename))[0]
+            + ("_noisy" if args.noisy_lidar else "")
+            + ".json",
         )
         with open(result_filename, "w", encoding="utf-8") as f:
             json.dump(res_dict, f, indent=4, ensure_ascii=False, default=str)
