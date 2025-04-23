@@ -52,10 +52,22 @@ def parse_arguments():
         help="config filename (*.yaml)",
     )
     argparser.add_argument(
+        "-r",
+        "--rolename",
+        default="hero",
+        help="rolename of the ego vehicle",
+    )
+    argparser.add_argument(
         "-v",
         "--preview",
         action="store_true",
         help="open an open3d windows to preview current frame",
+    )
+    argparser.add_argument(
+        "-n",
+        "--noisy-lidar",
+        action="store_true",
+        help="switch to noisy lidar",
     )
     argparser.add_argument(
         "-e",
@@ -140,6 +152,7 @@ def scene_rendering(
 def evaluation_result(gt_annos, det_annos, class_names: list):
     from pcdet.ops.iou3d_nms import iou3d_nms_utils
     import math
+
     def safe_divide(a: float, b: float) -> float:
         return a / b if b != 0.0 else math.nan
 
@@ -178,9 +191,9 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 gt_iou3d = iou3d_nms_utils.boxes_iou3d_gpu(
                     label_gt_boxes[:, :7], label_det_boxes
                 )
-                channel_res[class_name]["3d"]["recall"] += torch.any(
-                    gt_iou3d >= 0.7, dim=1
-                ).sum().item()
+                channel_res[class_name]["3d"]["recall"] += (
+                    torch.any(gt_iou3d >= 0.7, dim=1).sum().item()
+                )
                 channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
 
         res_dict[channel_name] = channel_res
@@ -203,7 +216,7 @@ def main(args):
     cfg = pcdet.config.cfg_from_yaml_file(args.config_filename, pcdet.config.cfg)
 
     client.replay_file(args.recorder_filename)
-    client.connect_to_vehicle("hero")
+    client.connect_to_vehicle(args.rolename, noisy_lidar=args.noisy_lidar)
 
     pcs_dataset = carla_point_cloud_dataset(
         dataset_cfg=cfg.DATA_CONFIG,
@@ -240,27 +253,17 @@ def main(args):
     visualizers = None
     if args.preview:
         visualizers = {}
+        view_status = ""
+        with open("asset/view_status.json", "r") as input_stream:
+            view_status = input_stream.read()
+
         for channel_name in pcs_dataset.preview_channel:
             visualizers[channel_name] = o3d.visualization.Visualizer()
             visualizers[channel_name].create_window(
                 window_name=channel_name, width=1920, height=1080
             )
-        # view_control = visualizers[channel_name].get_view_control()
-        # view_params = {
-        #     "boundingbox_max": np.array([69.118263244628906, 39.679920196533203, 16.415634155273438]),
-        #     "boundingbox_min": np.array([-0.059999999999999998, -39.679874420166016, -6.9146575927734375]),
-        #     "field_of_view": 60.0,
-        #     "front": np.array([-0.90307097537632919, 0.0017988087570628851, 0.42948757574567964]),
-        #     "lookat": np.array([34.529131622314452, 2.288818359375e-05, 4.75048828125]),
-        #     "up": np.array([0.42948904059539766, 0.0070563614983622357, 0.90304450154510629]),
-        #     "zoom": 0.69999999999999996
-        # }
-        # view_control.set_front(view_params["front"])
-        # view_control.set_lookat(view_params["lookat"])
-        # view_control.set_up(view_params["up"])
-        # view_control.set_zoom(view_params["zoom"])
-        # view_control.change_field_of_view(view_params["field_of_view"])
-        # view_control.set_constant_z_far(280.0)
+            visualizers[channel_name].set_view_status(view_status)
+
     gt_annos = {channel_name: [] for channel_name in pcs_dataset.preview_channel}
     det_annos = {channel_name: [] for channel_name in pcs_dataset.preview_channel}
     try:

@@ -69,7 +69,7 @@ class carla_client:
     def replay_file(self, recorder_filename):
         self.carla_client.replay_file(recorder_filename, 0.0, 0.0, 0, False)
 
-    def connect_to_vehicle(self, rolename):
+    def connect_to_vehicle(self, rolename, noisy_lidar=True):
         settings = self.carla_world.get_settings()
         traffic_manager = self.carla_client.get_trafficmanager(8000)
         traffic_manager.set_synchronous_mode(True)
@@ -91,7 +91,21 @@ class carla_client:
                     break
 
         self.lidar_t = lidar_carla(
-            self.carla_world, self.vehicle, pcs_cache=False, need_gt=True
+            self.carla_world,
+            self.vehicle,
+            {
+                "upper_fov": "2.0",
+                "lower_fov": "-24.8",
+                "channels": "64.0",
+                "range": "120.0",
+                "points_per_second": "3300000",
+                "semantic": False,
+                "no_noise": not noisy_lidar,
+                "delta": delta,
+                # "rotation_frequency":"20"
+            },
+            pcs_cache=False,
+            need_gt=True,
         )
         self.lidar_t.init_lidar()
 
