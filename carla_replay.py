@@ -85,9 +85,7 @@ class replay_finished(Exception):
 
 def carla_ticking(client, idx, data_dict):
     before_time = time.perf_counter()
-
     client.carla_world.tick()
-
     after_time = time.perf_counter()
     return after_time - before_time, None
 
@@ -165,6 +163,7 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
         channel_res = {
             name: {
                 "3d": {
+                    "confidence": 0,
                     "recall": 0,
                     "totall": 0,
                 }
@@ -213,11 +212,13 @@ def main(args):
     client.init_client()
     client.start_client()
 
-    cfg = pcdet.config.cfg_from_yaml_file(args.config_filename, pcdet.config.cfg)
-
+    client.synchronize_client()
     client.replay_file(args.recorder_filename)
+    client.carla_world.tick() # skip one frame to avoid the ego vehicle did not initialize properly
+
     client.connect_to_vehicle(args.rolename, noisy_lidar=args.noisy_lidar)
 
+    cfg = pcdet.config.cfg_from_yaml_file(args.config_filename, pcdet.config.cfg)
     pcs_dataset = carla_point_cloud_dataset(
         dataset_cfg=cfg.DATA_CONFIG,
         logger=logger,
@@ -384,7 +385,7 @@ def main(args):
 
         result_filename = os.path.join(
             "./evaluation_result",
-            os.path.splitext(os.path.basename(args.recorder_filename))[0] + ".json",
+            os.path.splitext(os.path.basename(args.recorder_filename))[0] + ("_noisy" if args.noisy_lidar else "") + ".json",
         )
         with open(result_filename, "w", encoding="utf-8") as f:
             json.dump(res_dict, f, indent=4, ensure_ascii=False, default=str)

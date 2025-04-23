@@ -10,12 +10,13 @@ from sensor_std import lidar_carla
 
 class carla_client:
     def __init__(
-        self, host="127.0.0.1", port=2000, rendering=True, logger=None
+        self, host="127.0.0.1", port=2000, delta=0.05, rendering=True, logger=None
     ) -> None:
         self.carla_client = None
         self.carla_world = None
         self.host = host
         self.port = port
+        self.delta = delta
         self.rendering = rendering
         self.logger = logger
 
@@ -70,17 +71,6 @@ class carla_client:
         self.carla_client.replay_file(recorder_filename, 0.0, 0.0, 0, False)
 
     def connect_to_vehicle(self, rolename, noisy_lidar=True):
-        settings = self.carla_world.get_settings()
-        traffic_manager = self.carla_client.get_trafficmanager(8000)
-        traffic_manager.set_synchronous_mode(True)
-
-        delta = 0.05
-
-        settings.fixed_delta_seconds = delta
-        settings.synchronous_mode = True
-        settings.no_rendering_mode = not self.rendering
-        self.carla_world.apply_settings(settings)
-
         self.vehicle = None
         while self.vehicle is None:
             possible_vehicles = self.carla_world.get_actors().filter("vehicle.*")
@@ -101,13 +91,23 @@ class carla_client:
                 "points_per_second": "3300000",
                 "semantic": False,
                 "no_noise": not noisy_lidar,
-                "delta": delta,
+                "delta": self.delta,
                 # "rotation_frequency":"20"
             },
             pcs_cache=False,
             need_gt=True,
         )
         self.lidar_t.init_lidar()
+
+    def synchronize_client(self):
+        settings = self.carla_world.get_settings()
+        traffic_manager = self.carla_client.get_trafficmanager(8000)
+        traffic_manager.set_synchronous_mode(True)
+
+        settings.fixed_delta_seconds = self.delta
+        settings.synchronous_mode = True
+        settings.no_rendering_mode = not self.rendering
+        self.carla_world.apply_settings(settings)
 
     def debug_luanch_test_2(self, rolename) -> None:
         settings = self.carla_world.get_settings()

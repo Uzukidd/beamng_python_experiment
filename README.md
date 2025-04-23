@@ -26,7 +26,7 @@ https://github.com/Uzukidd/beamng_python_experiment/assets/53105227/c22ee48c-eca
                           rolename of the ego vehicle
     -v, --preview         open an open3d windows to preview current frame
     -n, --noisy-lidar     switch to noisy lidar
-    -e, --evaluate        evaluate result after finishing repla
+    -e, --evaluate        evaluate result after finishing replay
   ```
 * BeamNG
   * see `main_playground.ipynb` for more details.

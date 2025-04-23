@@ -3,6 +3,7 @@
 dataset/
 test/
 evaluation_result/*
+outputs/
 
 # Pytorch weights and cache
 *.pt
