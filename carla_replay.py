@@ -10,6 +10,9 @@ import open3d as o3d
 import torch
 import time
 
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 try:
     import pcdet.config
     from pcdet.datasets import DatasetTemplate
@@ -42,13 +45,13 @@ def parse_arguments():
         "-f",
         "--recorder-filename",
         metavar="F",
-        default="D:\\project\\scenario_runner\\manual_records\\FollowLeadingVehicleWithObstacle_1.log",
+        default="D:/project/scenario_runner/manual_records/FollowLeadingVehicleWithObstacle_1.log",
         help="recorder filename (test1.log)",
     )
     argparser.add_argument(
         "-c",
         "--config-filename",
-        default=".\\configs\\carla_predict_eval.yaml",
+        default="./configs/carla_predict_eval.yaml",
         help="config filename (*.yaml)",
     )
     argparser.add_argument(
@@ -180,35 +183,41 @@ def evaluation_result(gt_annos, det_annos, class_names: list):
                 ind_det_annos["pred_labels"]
             )
 
-            if gt_boxes is None:
+            if gt_boxes is None or gt_boxes.numel() == 0:
                 continue
 
             for label, class_name in enumerate(class_names):
                 label = label + 1
-                label_gt_boxes = gt_boxes[gt_boxes[:, 7] == label].cuda()
+                label_gt_boxes = gt_boxes[gt_boxes[:, 7] == label].cuda().float()
 
-                label_det_boxes = det_boxes[det_labels == label].cuda()
-                label_det_scores = det_scores[det_labels == label].cuda()
+                if label_gt_boxes.numel() == 0 :
+                    continue
 
-                if label_gt_boxes.numel() == 0:
+                channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
+
+                label_det_boxes = det_boxes[det_labels == label].cuda().float()
+                label_det_scores = det_scores[det_labels == label].cuda().float()
+
+                if label_det_boxes.numel() == 0 :
                     continue
 
                 # 3d bounding box metric
                 gt_iou3d: torch.Tensor = iou3d_nms_utils.boxes_iou3d_gpu(
                     label_gt_boxes[:, :7], label_det_boxes
                 )
-                channel_res[class_name]["3d"]["recall"] += (
-                    torch.any(gt_iou3d >= 0.7, dim=1).sum().item()
-                )
-                channel_res[class_name]["3d"]["totall"] += label_gt_boxes.size(0)
+                torch.cuda.synchronize()
 
-                if gt_iou3d.numel() == 0:
-                    continue
+                valid_gt = torch.any(gt_iou3d >= 0.7, dim=1)
+                channel_res[class_name]["3d"]["recall"] += valid_gt.sum().item()
+                
                 # confidence scores metric
-                correspond_det_idx = gt_iou3d[torch.any(gt_iou3d >= 0.7, dim=1), :].argmax(dim=1)
+                correspond_det_idx = gt_iou3d[valid_gt, :].argmax(dim=1)
+                if correspond_det_idx.numel() == 0:
+                    continue
                 channel_res[class_name]["3d"]["confidence"] += label_det_scores[
                     correspond_det_idx
                 ].tolist()
+        
         for label, class_name in enumerate(class_names):
             channel_res[class_name]["3d"]["confidence"] = np.array(
                 channel_res[class_name]["3d"]["confidence"]
@@ -396,6 +405,7 @@ def main(args):
         print("CarLA client closed!")
 
     if args.evaluate:
+        print("start evaluation")
         res_dict, res_str = evaluation_result(gt_annos, det_annos, cfg.CLASS_NAMES)
         print(res_str)
         import os
