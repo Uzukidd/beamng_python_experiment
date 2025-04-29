@@ -2,6 +2,7 @@
 .np_cache/
 dataset/
 test/
+data/*
 evaluation_result/*
 outputs/
 

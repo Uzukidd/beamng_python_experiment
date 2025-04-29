@@ -246,6 +246,21 @@ class point_cloud_dataset_base(torch_data.Dataset):
         data_dict["points"] = points
 
         return data_dict
+    
+    def scaling(self, data_dict=None, config=None):
+        """
+        Scaling
+            points[:, :3] = points[:, :3] * scalar
+        """
+        if data_dict is None:
+            return partial(self.scaling, config=config)
+        points = data_dict["points"]
+        scalar = config["scalar"]
+
+        points[:, :3] = points[:, :3] * scalar
+        data_dict["points"] = points
+
+        return data_dict
 
     def mask_points_by_range(self, data_dict=None, config=None):
         if data_dict is None:
@@ -576,7 +591,6 @@ class file_point_cloud_dataset(point_cloud_dataset_base):
         )
         self.root_path = root_path
         self.filenames = os.listdir(os.path.join(self.root_path, "points"))
-        print(self.filenames)
 
         self.points = []
         self.gt = []
