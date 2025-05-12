@@ -575,6 +575,28 @@ class beamng_point_cloud_dataset(point_cloud_dataset_base):
 
     def __getitem__(self, index):
         return super().__getitem__(index)
+    
+class ros_point_cloud_dataset(point_cloud_dataset_base):
+    def __init__(
+        self,
+        dataset_cfg,
+        class_names,
+        training=False,
+        root_path=None,
+        logger=None,
+        lidar=None,
+    ) -> None:
+        super().__init__(
+            dataset_cfg=dataset_cfg,
+            class_names=class_names,
+            training=training,
+            root_path=root_path,
+            logger=logger,
+            lidar=lidar,
+        )
+
+    def __getitem__(self, index):
+        return super().__getitem__(index)
 
 
 class file_point_cloud_dataset(point_cloud_dataset_base):

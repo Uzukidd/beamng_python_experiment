@@ -224,7 +224,9 @@ class lidar_carla:
 
                     boudning_box_np[6] = -np.radians(bounding_box_rot)
 
-                    boudning_box_np[7] = 1 if int(npc.attributes["number_of_wheels"]) > 2 else 3
+                    boudning_box_np[7] = (
+                        1 if int(npc.attributes["number_of_wheels"]) > 2 else 3
+                    )
 
                     boudning_box_np[0:3] = rotate_yaw(
                         boudning_box_np[0:3],
@@ -262,3 +264,52 @@ class lidar_carla:
 
         if self.pcs_cache:
             data.astype(np.float32).tofile("./.np_cache/carla_pcs.bin")
+
+try:
+    import rospy
+    from sensor_msgs.msg import PointCloud2
+    import ros_numpy
+
+    class lidar_ros:
+        def __init__(
+            self,
+            node_name:str = "livox_listener",
+            subscriber_name:str = "/livox",
+            logger=None,
+            pcs_cache=False,
+            pcs_frames_cache=1,
+        ) -> None:
+            # self.pcs_frames = Queue(pcs_frames_cache)
+            self.pcs_frames = None
+            self.logger = logger
+            self.lidar = None
+
+            self.pcs_cache = pcs_cache
+
+            self.node_name = node_name
+            self.subscriber_name = subscriber_name
+            self.init_ros()
+
+
+        def init_ros(self):
+            rospy.init_node(self.node_name, anonymous=True)
+            rospy.Subscriber(self.subscriber_name, PointCloud2, self._pcs_callback)
+            rospy.spin()
+
+        def get_single_frame(self) -> np.ndarray:
+            res = self.pcs_frames
+            return res, None
+
+        def _pcs_callback(self, msg) -> None:
+            pc_array = ros_numpy.point_cloud2.pointcloud2_to_array(msg)
+
+            points = np.zeros((pc_array.shape[0], 4), dtype=np.float32)
+            points[:, 0] = pc_array['x']
+            points[:, 1] = pc_array['y']
+            points[:, 2] = pc_array['z']
+            points[:, 3] = pc_array['intensity']
+
+            self.pcs_frames = points
+
+except Exception as e:
+    print("This machine has not installed ros")

@@ -96,7 +96,6 @@ class beamng_point_cloud_dataset(DatasetTemplate):
 
         return data_dict
 
-
 class beamng_point_cloud_process_tools(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=False, root_path=None, logger=None, ext='.bin') -> None:
         super().__init__(

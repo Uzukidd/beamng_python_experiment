@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import logging
 
-from .dataset_tools import carla_point_cloud_dataset, beamng_point_cloud_dataset, file_point_cloud_dataset
+from .dataset_tools import carla_point_cloud_dataset, beamng_point_cloud_dataset, ros_point_cloud_dataset, file_point_cloud_dataset
 from .config_init import cfg, cfg_from_yaml_file
 # from .visualize_utils import draw_scenes_maya, mayavi_animate_visualizer
 from .open3d_vis_utils import draw_scenes
